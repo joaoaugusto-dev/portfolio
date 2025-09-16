@@ -1,0 +1,30 @@
+{
+  "name": "portfolio",
+  "version": "0.0.1",
+  "description": "",
+  "homepage": "https://github.com/joaoaugusto-dev/portfolio#readme",
+  "bugs": {
+    "url": "https://github.com/joaoaugusto-dev/portfolio/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joaoaugusto-dev/portfolio.git"
+  },
+  "license": "ISC",
+  "author": "joao-dev",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^17.2.2",
+    "ejs": "^3.1.10",
+    "express": "^5.1.0",
+    "multer": "^2.0.2",
+    "nodemon": "^3.1.10",
+    "sequelize": "^6.37.7"
+  }
+}
