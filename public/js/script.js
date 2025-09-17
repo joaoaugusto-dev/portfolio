@@ -28,6 +28,34 @@ function initializeSmoothScroll() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Função para verificar se a seção está visível na viewport
+    function isSectionInView(section) {
+        const rect = section.getBoundingClientRect();
+        return (
+            rect.top <= window.innerHeight * 0.7 &&
+            rect.bottom >= window.innerHeight * 0.3
+        );
+    }
+
+    // Ativa projetos ao chegar na seção no mobile
+    if (window.innerWidth <= 768) {
+        const projetosSection = document.querySelector('#projetos');
+        const projectItems = document.querySelectorAll('.project-item');
+        let projetosAtivados = false;
+        function ativarProjetosMobile() {
+            if (!projetosAtivados && projetosSection && isSectionInView(projetosSection)) {
+                projectItems.forEach((project, index) => {
+                    project.classList.add('ativo');
+                    project.style.opacity = '1';
+                    project.style.transform = 'translateY(0)';
+                });
+                projetosAtivados = true;
+            }
+        }
+        window.addEventListener('scroll', ativarProjetosMobile);
+        // Também tenta ativar ao carregar
+        ativarProjetosMobile();
+    }
     AOS.init({
         duration: 800,
         once: true,
@@ -71,27 +99,39 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    const createObserver = (options = {}) => {
-        return new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.classList.add('ativo');
-                    if (entry.target.getAttribute('data-scroll') === 'sequencia') {
-                        const index = Array.from(entry.target.parentElement.children).indexOf(entry.target);
-                        entry.target.style.setProperty('--scroll-order', index);
-                    }
-                    observer.unobserve(entry.target);
+    // Ajuste para IntersectionObserver em telas menores
+    function getObserverOptions() {
+        if (window.innerWidth <= 768) {
+            return { threshold: 0.05, rootMargin: '0px 0px -50px 0px' };
+        }
+        return { threshold: 0.1, rootMargin: '0px 0px -150px 0px' };
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('ativo');
+                if (entry.target.getAttribute('data-scroll') === 'sequencia') {
+                    const index = Array.from(entry.target.parentElement.children).indexOf(entry.target);
+                    entry.target.style.setProperty('--scroll-order', index);
+                }
+                observer.unobserve(entry.target);
+            }
+        });
+    }, getObserverOptions());
+
+    document.querySelectorAll('[data-scroll], [data-scroll-section]').forEach(el => observer.observe(el));
+
+    // Fallback para mobile: se não houver animação após 1s, força ativação
+    if (window.innerWidth <= 768) {
+        setTimeout(() => {
+            document.querySelectorAll('[data-scroll], [data-scroll-section]').forEach(el => {
+                if (!el.classList.contains('ativo')) {
+                    el.classList.add('ativo');
                 }
             });
-        }, { 
-            threshold: 0.1, 
-            rootMargin: '0px 0px -150px 0px', 
-            ...options 
-        });
-    };
-
-    const observer = createObserver();
-    document.querySelectorAll('[data-scroll], [data-scroll-section]').forEach(el => observer.observe(el));
+        }, 1000);
+    }
 
     const filterButtons = document.querySelectorAll('.filter-btn');
     const projectItems = document.querySelectorAll('.project-item');
