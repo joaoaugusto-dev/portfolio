@@ -16,7 +16,7 @@ const I18N = {
             nav_cursos: "Courses",
             nav_contato: "Contact",
             // Hero
-            hero_sub: "Software Developer — Flutter, Node.js, & more!",
+            hero_sub: "Software Developer (Dev) based in São João da Boa Vista, Brazil — Flutter, Node.js, & more!",
             hero_cta1: "View Projects",
             hero_cta2: "Let's Talk",
             // About
@@ -55,13 +55,14 @@ const I18N = {
             // Footer
             rights: "All rights reserved.",
             // SEO / head
-            title: "João Augusto de Freitas | Software Developer",
-            meta_desc: "Portfolio of João Augusto de Freitas, full-stack software developer specialized in Flutter, Node.js, NestJS and ESP32/IoT. See projects, skills and journey."
+            title: "João Augusto de Freitas | Software Developer in São João da Boa Vista",
+            meta_desc: "Portfolio of João Augusto de Freitas, dev/full-stack software developer based in São João da Boa Vista, Brazil, specialized in Flutter, Node.js, NestJS and ESP32/IoT. Graduated from ETEC de Vargem Grande do Sul, studying Systems Analysis and Development at UNIFEOB. See projects, skills and journey."
         },
         html: {
             about_desc:
-                "Systems Analysis and Development student at UNIFEOB (expected graduation 2027)<br>\n" +
-                "                    High School with Technical Course in Internet Informatics - Completed in 2024",
+                "Software developer (dev) based in São João da Boa Vista, Brazil<br>\n" +
+                "                    Systems Analysis and Development student at UNIFEOB (expected graduation 2027)<br>\n" +
+                "                    High School with Technical Course in Internet Informatics at ETEC de Vargem Grande do Sul - Completed in 2024",
 
             proj_sidera:
                 "🏢 <strong>Partner Company:</strong> <a href=\"https://www.soufer.com.br/\" target=\"_blank\" onclick=\"event.stopPropagation()\" aria-label=\"Soufer official website\" style=\"display: inline-flex; align-items: center; vertical-align: middle; text-decoration: none;\">" +
