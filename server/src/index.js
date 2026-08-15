@@ -10,6 +10,13 @@ const journeyRouter = require("./routes/journey");
 
 const app = express();
 
+// Render (e qualquer PaaS) fica atrás de um único proxy reverso na borda, que
+// seta X-Forwarded-For. Sem isso, o Express não confia nesse header — e o
+// express-rate-limit (nas rotas públicas de mídia/capa) não consegue saber o
+// IP real de quem pediu, base do limite por IP. "1" = confia só nesse primeiro
+// salto, não numa cadeia arbitrária (evitar isso é o motivo de não usar `true`).
+app.set("trust proxy", 1);
+
 // Segunda rede, pra qualquer rejeição que escape até daqui (fora do ciclo de uma
 // requisição HTTP) — loga em vez de deixar o Node derrubar o processo sozinho.
 process.on("unhandledRejection", (err) => console.error("unhandledRejection:", err));
