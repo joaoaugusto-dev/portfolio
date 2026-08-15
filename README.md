@@ -9,7 +9,7 @@ Duas apps:
 
 1. Crie um projeto em https://supabase.com.
 2. Em **SQL Editor > New query**, cole o conteúdo de [`server/database.sql`](server/database.sql) e rode. Isso cria a tabela `Projects` e já insere os 11 projetos originais do portfólio.
-3. Ainda no SQL Editor, rode também [`server/migrations/002_courses_journey.sql`](server/migrations/002_courses_journey.sql) — cria e semeia as tabelas de `Courses` e `JourneyItem` (aba **Cursos** e **Jornada** do admin).
+3. As tabelas `Courses` e `JourneyItems` (aba **Cursos** e **Jornada** do admin) não precisam de SQL manual — o Sequelize cria elas sozinho (`sequelize.sync()`) na primeira vez que o backend sobe. Ficam vazias até você cadastrar o conteúdo pelo próprio painel admin.
 4. Em **Authentication > Users**, crie seu usuário admin (email + senha) — é o login do painel. Não há cadastro público, então crie manualmente pelo painel do Supabase.
 5. Em **Project Settings > API**, anote `Project URL`, a chave `anon public` e a `service_role` (secreta).
 6. Em **Project Settings > Database > Connect**, aba **Transaction pooler**, copie a connection string do Postgres. Use o pooler (porta 6543), não o host direto `db.xxxx.supabase.co` — esse só tem endereço IPv6 e não conecta em redes sem suporte a IPv6.
@@ -36,7 +36,7 @@ npm install
 npm run dev               # http://localhost:4000
 ```
 
-Se você pulou os passos de SQL no Supabase, `npm run seed` cria as tabelas via Sequelize e popula os projetos originais (só roda se a tabela `Projects` estiver vazia — não cobre `Courses`/`JourneyItem`, isso só vem do `database.sql`/`002_courses_journey.sql`).
+Se você pulou o passo de SQL no Supabase, `npm run seed` cria a tabela `Projects` via Sequelize e popula os projetos originais (só roda se ela estiver vazia). `Courses` e `JourneyItems` são criadas automaticamente pelo `sequelize.sync()` ao subir o servidor, mas ficam vazias — cadastre o conteúdo pelo painel admin.
 
 Deploy no Render: o [`render.yaml`](render.yaml) já descreve o serviço (blueprint) — Render → New → Blueprint, aponta pro repo. As variáveis marcadas `sync: false` (`DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`) precisam ser preenchidas à mão no dashboard depois — o blueprint só declara os nomes, nunca guarda segredo. `CORS_ORIGIN` já vem com a URL de produção do site; ajuste se o domínio mudar.
 
