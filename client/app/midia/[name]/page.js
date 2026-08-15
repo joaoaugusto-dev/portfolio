@@ -9,7 +9,17 @@ export async function generateMetadata({ params }) {
   const { name } = await params;
   const media = await getMedia(name).catch(() => null);
   if (!media) return { title: "Mídia não encontrada" };
-  const image = media.kind === "image" ? media.url : media.kind === "video" ? media.posterUrl : undefined;
+  // pdf/outros não têm frame nenhum pra tirar prévia — em vez de deixar cair
+  // no og:image padrão do site (a minha foto, definida no layout raiz), usa
+  // um ícone estático na paleta de cores do site.
+  const image =
+    media.kind === "image"
+      ? media.url
+      : media.kind === "video"
+        ? media.posterUrl
+        : media.kind === "pdf"
+          ? "/images/og-pdf.png"
+          : "/images/og-file.png";
   return {
     title: `${media.title} | João Augusto de Freitas`,
     description: media.description || undefined,

@@ -52,10 +52,16 @@ export default function FilesAdmin({ token }) {
   const [copiedName, setCopiedName] = useState("");
   const [form, setForm] = useState({ name: "", title: "", description: "" });
   const [editing, setEditing] = useState(null); // { name, title, description }
-  const [posterEditing, setPosterEditing] = useState(null); // arquivo (kind video)
+  const [posterEditing, setPosterEditing] = useState(null); // arquivo já no servidor (kind video)
   const [usage, setUsage] = useState(null); // { bytesUsed, capBytes }
+  const [pending, setPending] = useState([]); // File[] selecionados, aguardando confirmação de envio
+  const [pendingPoster, setPendingPoster] = useState(null); // { blob, url } escolhido localmente (só 1 vídeo)
+  const [pickingPoster, setPickingPoster] = useState(false);
+  const [posterDecided, setPosterDecided] = useState(false); // true só depois que o usuário escolheu ou pulou de propósito
   const inputRef = useRef(null);
   const [toast, notify] = useToast();
+
+  useEffect(() => () => pendingPoster?.url && URL.revokeObjectURL(pendingPoster.url), [pendingPoster]);
 
   async function refresh() {
     setFiles(await api.listFiles(token).catch((err) => {
@@ -70,13 +76,54 @@ export default function FilesAdmin({ token }) {
     refresh();
   }, []);
 
-  async function handleFiles(fileList) {
+  // Só encosta os arquivos escolhidos — nada sobe ainda. Se for 1 vídeo, abre o
+  // escolhedor de miniatura na hora, direto do arquivo local (sem rede
+  // nenhuma), pra confirmar tudo (título, descrição, miniatura) antes de enviar.
+  function stageFiles(fileList) {
     const list = [...fileList];
     if (!list.length) return;
+    setPending(list);
+    setPendingPoster(null);
+    setPickingPoster(list.length === 1 && list[0].type.startsWith("video/"));
+    setPosterDecided(false);
+    setError("");
+  }
+
+  function cancelPending() {
+    setPending([]);
+    setPendingPoster(null);
+    setPickingPoster(false);
+    setPosterDecided(false);
+  }
+
+  // Nada sobe faltando o que devia — título e (se for 1 vídeo) uma decisão
+  // sobre a miniatura, nem que seja "usar o frame automático" de propósito.
+  // Em vez de cair num valor padrão em silêncio, avisa o que falta e trava o
+  // botão até resolver.
+  function missingBeforeUpload() {
+    if (pending.length !== 1) return [];
+    const missing = [];
+    if (!form.title.trim()) missing.push("título");
+    if (pending[0].type.startsWith("video/") && !posterDecided) missing.push("miniatura");
+    return missing;
+  }
+
+  async function confirmUpload() {
+    const missing = missingBeforeUpload();
+    if (missing.length) {
+      notify(`Falta preencher: ${missing.join(", ")}`, "error");
+      return;
+    }
+    const list = pending;
+    const poster = pendingPoster;
+    if (!list.length) return;
+    setPending([]);
+    setPendingPoster(null);
+    setPickingPoster(false);
+    setPosterDecided(false);
     const totalBytes = list.reduce((sum, f) => sum + f.size, 0);
     setProgress({ index: 0, count: list.length, fileName: list[0].name, loaded: 0, total: totalBytes, phase: "uploading" });
     setError("");
-    let uploadedVideo = null; // só faz sentido oferecer a escolha de miniatura pra 1 vídeo por vez
     try {
       // Nome/título/descrição valem pra um arquivo por vez; em lote usa o nome original.
       let sentBefore = 0;
@@ -92,7 +139,9 @@ export default function FilesAdmin({ token }) {
             phase: loaded >= fileTotal ? "processing" : "uploading",
           }));
         });
-        if (list.length === 1 && created?.kind === "video") uploadedVideo = created;
+        if (list.length === 1 && created?.kind === "video" && poster) {
+          await api.setPoster(token, created.name, { image: poster.blob });
+        }
         sentBefore += file.size;
       }
       setForm({ name: "", title: "", description: "" });
@@ -104,10 +153,6 @@ export default function FilesAdmin({ token }) {
     } finally {
       setProgress(null);
     }
-    // Direto pro escolhedor de miniatura assim que o vídeo termina de subir, em
-    // vez de deixar só pro botão de editar depois — o servidor já gerou uma
-    // (frame automático em 1s), então aqui é ajustar, não um passo obrigatório.
-    if (uploadedVideo) setPosterEditing(uploadedVideo);
   }
 
   async function handleDelete(name) {
@@ -223,14 +268,14 @@ export default function FilesAdmin({ token }) {
         onDrop={(e) => {
           e.preventDefault();
           setOver(false);
-          if (!uploading) handleFiles(e.dataTransfer.files);
+          if (!uploading) stageFiles(e.dataTransfer.files);
         }}
         onClick={() => !uploading && inputRef.current?.click()}
         className={`mb-8 cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center transition-all duration-300 ${
           uploading ? "cursor-wait opacity-60" : ""
         } ${over ? "scale-[1.01] border-accent bg-accent/5" : "border-white/15 hover:border-accent/60"}`}
       >
-        <input ref={inputRef} type="file" multiple hidden onChange={(e) => handleFiles(e.target.files)} />
+        <input ref={inputRef} type="file" multiple hidden onChange={(e) => stageFiles(e.target.files)} />
 
         <motion.i
           animate={over ? { y: -6, scale: 1.15 } : { y: 0, scale: 1 }}
@@ -244,6 +289,78 @@ export default function FilesAdmin({ token }) {
           Imagens, vídeos, PDFs e outros — até 200MB por arquivo
         </p>
       </div>
+
+      <AnimatePresence>
+        {pending.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="mb-8 space-y-3 rounded-2xl border border-white/10 bg-surface p-5"
+          >
+            <p className="text-sm">
+              {pending.length === 1 ? pending[0].name : `${pending.length} arquivos selecionados`}
+              <span className="ml-2 text-xs text-muted">{formatSize(pending.reduce((s, f) => s + f.size, 0))}</span>
+            </p>
+
+            {pickingPoster && (
+              <LocalPosterPicker
+                file={pending[0]}
+                onConfirm={(blob) => {
+                  setPendingPoster((prev) => {
+                    if (prev?.url) URL.revokeObjectURL(prev.url);
+                    return { blob, url: URL.createObjectURL(blob) };
+                  });
+                  setPickingPoster(false);
+                  setPosterDecided(true);
+                }}
+                onSkip={() => {
+                  setPickingPoster(false);
+                  setPosterDecided(true);
+                }}
+              />
+            )}
+
+            {!pickingPoster && pending.length === 1 && pending[0].type.startsWith("video/") && (
+              <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-background/60 p-3">
+                {pendingPoster ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- preview local da miniatura escolhida
+                  <img src={pendingPoster.url} alt="" className="h-12 w-20 shrink-0 rounded-lg object-cover" />
+                ) : (
+                  <i className="fa-solid fa-image w-20 shrink-0 text-center text-lg text-muted" aria-hidden />
+                )}
+                <p className="flex-1 text-xs text-muted">
+                  {pendingPoster ? "Miniatura escolhida." : "Sem miniatura — vai usar o frame automático em 1s."}
+                </p>
+                <button type="button" onClick={() => setPickingPoster(true)} className="btn btn-ghost py-1.5 text-xs">
+                  {pendingPoster ? "Trocar" : "Escolher"}
+                </button>
+              </div>
+            )}
+
+            {!pickingPoster && pending.length === 1 && missingBeforeUpload().length > 0 && (
+              <p className="text-xs text-amber-400">
+                <i className="fa-solid fa-triangle-exclamation mr-1.5" aria-hidden />
+                Falta preencher: {missingBeforeUpload().join(", ")}.
+              </p>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={confirmUpload}
+                disabled={!pickingPoster && missingBeforeUpload().length > 0}
+                className="btn btn-primary sheen py-2.5 text-sm disabled:opacity-50"
+              >
+                Enviar
+              </button>
+              <button type="button" onClick={cancelPending} className="btn btn-ghost py-2.5 text-sm">
+                Cancelar
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
 
@@ -502,6 +619,229 @@ const fmtTime = (s) => {
   return `${m}:${String(r).padStart(2, "0")}`;
 };
 
+// Escolhedor de miniatura embutido no passo de seleção, antes de qualquer
+// upload: o <video> aponta pro arquivo local (blob: URL), então arrastar a
+// linha do tempo não depende de rede nem do servidor — é só decodificação no
+// próprio navegador, sem o custo de ida-e-volta que travava a versão anterior
+// (que buscava frames de um vídeo já hospedado no R2).
+const STRIP_COUNT = 14;
+
+function LocalPosterPicker({ file, onConfirm, onSkip }) {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const stripRef = useRef(null);
+  const [url, setUrl] = useState("");
+  const [mode, setMode] = useState("frame");
+  const [duration, setDuration] = useState(0);
+  const [time, setTime] = useState(0);
+  const [ready, setReady] = useState(false);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadPreview, setUploadPreview] = useState("");
+  const [thumbs, setThumbs] = useState([]);
+  const [building, setBuilding] = useState(false);
+
+  // Criação e revogação emparelhadas no mesmo efeito — se ficarem em efeitos
+  // separados, o Strict Mode do React (dev) simula montar/desmontar/montar de
+  // novo e a revogação do primeiro "desmonte" mata a blob: URL antes dela
+  // chegar a ser usada de verdade (ERR_FILE_NOT_FOUND no <video>).
+  useEffect(() => {
+    const u = URL.createObjectURL(file);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
+  useEffect(() => () => uploadPreview && URL.revokeObjectURL(uploadPreview), [uploadPreview]);
+
+  // Tira do vídeo local, tipo linha do tempo de editor: pega STRIP_COUNT
+  // frames espalhados no vídeo, seekando o mesmo <video> em sequência (rápido
+  // porque o blob já está todo decodificável na memória, sem rede envolvida).
+  useEffect(() => {
+    if (!ready) return;
+    let cancelled = false;
+    async function build() {
+      setBuilding(true);
+      const v = videoRef.current;
+      const canvas = document.createElement("canvas");
+      // Grande o bastante pra não borrar em tela HiDPI: a faixa estica cada
+      // miniatura por CSS, e num monitor 2x isso vira upscale real se a fonte
+      // for pequena demais — daqui é só downscale do vídeo, local e barato.
+      canvas.width = 320;
+      canvas.height = 180;
+      const ctx = canvas.getContext("2d");
+      ctx.imageSmoothingQuality = "high";
+      const out = [];
+      for (let i = 0; i < STRIP_COUNT; i++) {
+        if (cancelled) return;
+        const t = ((i + 0.5) / STRIP_COUNT) * duration;
+        await new Promise((resolve) => {
+          const onSeeked = () => {
+            v.removeEventListener("seeked", onSeeked);
+            resolve();
+          };
+          v.addEventListener("seeked", onSeeked);
+          v.currentTime = t;
+        });
+        ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+        // PNG (sem perda) em vez de JPEG: no tamanho da tira (96x54) o arquivo
+        // continua minúsculo, e sem quantização/JPEG a decodificação é até
+        // mais simples pro navegador — local não precisa economizar aqui.
+        out.push(canvas.toDataURL("image/png"));
+      }
+      if (cancelled) return;
+      setThumbs(out);
+      v.currentTime = time;
+      setBuilding(false);
+    }
+    build();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só reconstrói quando o vídeo fica pronto
+  }, [ready]);
+
+  function timeFromEvent(e) {
+    const el = stripRef.current;
+    if (!el || !duration) return 0;
+    const rect = el.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    return ratio * duration;
+  }
+
+  function scrubTo(t) {
+    setTime(t);
+    if (videoRef.current) videoRef.current.currentTime = t;
+  }
+
+  function startDrag(e) {
+    if (building) return;
+    scrubTo(timeFromEvent(e));
+    const move = (ev) => scrubTo(timeFromEvent(ev));
+    const stop = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", stop);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", stop);
+  }
+
+  function pickUpload(f) {
+    if (!f) {
+      setUploadFile(null);
+      setUploadPreview("");
+      return;
+    }
+    setUploadFile(f);
+    setUploadPreview(URL.createObjectURL(f));
+  }
+
+  function confirm() {
+    if (mode === "upload") {
+      if (uploadFile) onConfirm(uploadFile);
+      return;
+    }
+    const v = videoRef.current;
+    const canvas = canvasRef.current;
+    canvas.width = v.videoWidth;
+    canvas.height = v.videoHeight;
+    canvas.getContext("2d").drawImage(v, 0, 0);
+    canvas.toBlob((b) => b && onConfirm(b), "image/jpeg", 0.92);
+  }
+
+  return (
+    <div className="space-y-3 rounded-xl border border-white/10 bg-background/60 p-4">
+      <div className="flex gap-1 rounded-xl border border-white/10 bg-surface p-1 text-sm">
+        <button type="button" onClick={() => setMode("frame")} data-on={mode === "frame"} className="pill flex-1">
+          Escolher frame
+        </button>
+        <button type="button" onClick={() => setMode("upload")} data-on={mode === "upload"} className="pill flex-1">
+          Enviar imagem
+        </button>
+      </div>
+
+      {mode === "frame" ? (
+        <div className="space-y-2">
+          <div className="relative aspect-video overflow-hidden rounded-xl bg-black">
+            {url && (
+              <video
+                ref={videoRef}
+                src={url}
+                muted
+                playsInline
+                preload="metadata"
+                className="absolute inset-0 h-full w-full object-contain"
+                onLoadedMetadata={(e) => {
+                  setDuration(e.currentTarget.duration);
+                  setReady(true);
+                }}
+              />
+            )}
+            {!ready && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+                <i className="fa-solid fa-circle-notch fa-spin text-lg text-accent-2" aria-hidden />
+              </div>
+            )}
+          </div>
+
+          <div
+            ref={stripRef}
+            onMouseDown={startDrag}
+            onTouchStart={(e) => !building && scrubTo(timeFromEvent(e))}
+            onTouchMove={(e) => !building && scrubTo(timeFromEvent(e))}
+            className={`relative flex h-16 select-none overflow-hidden rounded-lg border border-white/10 bg-black ${
+              building ? "cursor-wait" : "cursor-pointer"
+            }`}
+          >
+            {thumbs.map((src, i) => (
+              // eslint-disable-next-line @next/next/no-img-element -- miniatura local (canvas), sem otimização
+              <img key={i} src={src} alt="" draggable={false} className="h-full flex-1 object-cover" />
+            ))}
+            {building && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-xs text-muted">
+                Gerando prévia...
+              </div>
+            )}
+            {ready && duration > 0 && (
+              <div
+                className="pointer-events-none absolute inset-y-0 w-0.5 bg-accent-2 shadow-[0_0_6px_rgba(155,89,182,0.8)]"
+                style={{ left: `${(time / duration) * 100}%` }}
+              />
+            )}
+          </div>
+
+          <p className="text-center text-xs tabular-nums text-muted">
+            {fmtTime(time)} / {fmtTime(duration)}
+          </p>
+          <canvas ref={canvasRef} hidden />
+        </div>
+      ) : (
+        <label className="flex aspect-video cursor-pointer items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-white/15 bg-black hover:border-accent/60">
+          <input type="file" accept="image/*" hidden onChange={(e) => pickUpload(e.target.files?.[0] || null)} />
+          {uploadPreview ? (
+            // eslint-disable-next-line @next/next/no-img-element -- preview local, sem otimização
+            <img src={uploadPreview} alt="" className="h-full w-full object-contain" />
+          ) : (
+            <span className="text-sm text-muted">Clique para escolher uma imagem</span>
+          )}
+        </label>
+      )}
+
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={confirm}
+          disabled={mode === "frame" ? !ready : !uploadFile}
+          className="btn btn-primary py-2 text-xs disabled:opacity-50"
+        >
+          Usar esta miniatura
+        </button>
+        <button type="button" onClick={onSkip} className="btn btn-ghost py-2 text-xs">
+          Usar frame automático
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // Modal de miniatura: ou arrasta a linha do tempo do próprio vídeo (o frame
 // atual é recortado no browser via canvas — nada de vídeo sobe de novo pro
 // servidor), ou envia uma imagem pronta. Os dois caminhos terminam comprimidos
@@ -515,6 +855,7 @@ const fmtTime = (s) => {
 function PosterPicker({ file, token, onClose, onSaved, notify }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+  const stripRef = useRef(null);
   const objectUrlRef = useRef(null);
   const seekTimer = useRef(null);
   const [ready, setReady] = useState(false);
@@ -524,6 +865,8 @@ function PosterPicker({ file, token, onClose, onSaved, notify }) {
   const [uploadFile, setUploadFile] = useState(null);
   const [uploadPreview, setUploadPreview] = useState("");
   const [saving, setSaving] = useState(false);
+  const [thumbs, setThumbs] = useState([]);
+  const [building, setBuilding] = useState(false);
 
   // O texto do tempo acompanha o arraste na hora; o seek de verdade no vídeo
   // (que baixa bytes novos do servidor) espera o dedo parar por um instante —
@@ -537,6 +880,69 @@ function PosterPicker({ file, token, onClose, onSaved, notify }) {
   }
 
   useEffect(() => () => clearTimeout(seekTimer.current), []);
+
+  // Mesma tira de miniaturas do escolhedor pré-upload, só que aqui os frames
+  // vêm do servidor (Range por trás) em vez de um blob local — inevitável
+  // pra um vídeo que já está no R2, mas ainda é STRIP_COUNT pedidos, não o
+  // arquivo inteiro de novo a cada arraste.
+  useEffect(() => {
+    if (!ready) return;
+    let cancelled = false;
+    async function build() {
+      setBuilding(true);
+      const v = videoRef.current;
+      const canvas = document.createElement("canvas");
+      canvas.width = 320;
+      canvas.height = 180;
+      const ctx = canvas.getContext("2d");
+      ctx.imageSmoothingQuality = "high";
+      const out = [];
+      for (let i = 0; i < STRIP_COUNT; i++) {
+        if (cancelled) return;
+        const t = ((i + 0.5) / STRIP_COUNT) * duration;
+        await new Promise((resolve) => {
+          const onSeeked = () => {
+            v.removeEventListener("seeked", onSeeked);
+            resolve();
+          };
+          v.addEventListener("seeked", onSeeked);
+          v.currentTime = t;
+        });
+        ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+        out.push(canvas.toDataURL("image/png"));
+      }
+      if (cancelled) return;
+      setThumbs(out);
+      v.currentTime = time;
+      setBuilding(false);
+    }
+    build();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só reconstrói quando o vídeo fica pronto
+  }, [ready]);
+
+  function timeFromEvent(e) {
+    const el = stripRef.current;
+    if (!el || !duration) return 0;
+    const rect = el.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    return ratio * duration;
+  }
+
+  function startDrag(e) {
+    if (building) return;
+    scrub(timeFromEvent(e));
+    const move = (ev) => scrub(timeFromEvent(ev));
+    const stop = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", stop);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", stop);
+  }
 
   function pickUpload(f) {
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
@@ -660,16 +1066,33 @@ function PosterPicker({ file, token, onClose, onSaved, notify }) {
                 </div>
               )}
             </div>
-            <input
-              type="range"
-              min="0"
-              max={duration || 0}
-              step="0.05"
-              value={time}
-              disabled={!ready}
-              onChange={(e) => scrub(Number(e.target.value))}
-              className="w-full accent-[var(--accent-2)]"
-            />
+
+            <div
+              ref={stripRef}
+              onMouseDown={startDrag}
+              onTouchStart={(e) => !building && scrub(timeFromEvent(e))}
+              onTouchMove={(e) => !building && scrub(timeFromEvent(e))}
+              className={`relative flex h-16 select-none overflow-hidden rounded-lg border border-white/10 bg-black ${
+                building ? "cursor-wait" : "cursor-pointer"
+              }`}
+            >
+              {thumbs.map((src, i) => (
+                // eslint-disable-next-line @next/next/no-img-element -- miniatura da tira, sem otimização
+                <img key={i} src={src} alt="" draggable={false} className="h-full flex-1 object-cover" />
+              ))}
+              {building && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-xs text-muted">
+                  Gerando prévia...
+                </div>
+              )}
+              {ready && duration > 0 && (
+                <div
+                  className="pointer-events-none absolute inset-y-0 w-0.5 bg-accent-2 shadow-[0_0_6px_rgba(155,89,182,0.8)]"
+                  style={{ left: `${(time / duration) * 100}%` }}
+                />
+              )}
+            </div>
+
             <p className="text-center text-xs tabular-nums text-muted">
               {fmtTime(time)} / {fmtTime(duration)}
             </p>
