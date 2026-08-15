@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getJourney, api } from "@/lib/api";
+import { revalidateHome } from "@/lib/actions";
 import { Spot, Toast, useToast } from "@/components/Fx";
 import IconPicker from "./IconPicker";
 
@@ -69,6 +70,7 @@ export default function JourneyAdmin({ token }) {
     try {
       setItems(await api.reorderJourneyItems(token, items.map((i) => i.id)));
       notify("Ordem salva");
+      revalidateHome();
     } catch (err) {
       setError(err.message);
       refresh();
@@ -102,6 +104,7 @@ export default function JourneyAdmin({ token }) {
       notify(editingId ? "Item atualizado" : "Item adicionado");
       resetForm();
       refresh();
+      revalidateHome();
     } catch (err) {
       setError(err.message);
       notify(err.message, "error");
@@ -115,6 +118,7 @@ export default function JourneyAdmin({ token }) {
     try {
       await api.deleteJourneyItem(token, id);
       notify("Item excluído");
+      revalidateHome();
     } catch (err) {
       setError(err.message);
       notify(err.message, "error");

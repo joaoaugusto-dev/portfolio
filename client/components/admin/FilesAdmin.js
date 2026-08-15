@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
+import { revalidateHome } from "@/lib/actions";
 import { Spot, Toast, useToast } from "@/components/Fx";
 
 const kinds = [
@@ -147,6 +148,7 @@ export default function FilesAdmin({ token }) {
       setForm({ name: "", title: "", description: "" });
       await refresh();
       notify(list.length === 1 ? "Arquivo enviado" : `${list.length} arquivos enviados`);
+      revalidateHome();
     } catch (err) {
       setError(err.message);
       notify(err.message, "error");
@@ -160,6 +162,7 @@ export default function FilesAdmin({ token }) {
     try {
       await api.deleteFile(token, name);
       notify("Arquivo excluído");
+      revalidateHome();
     } catch (err) {
       setError(err.message);
       notify(err.message, "error");
@@ -184,6 +187,7 @@ export default function FilesAdmin({ token }) {
       setEditing(null);
       notify("Alterações salvas");
       refresh();
+      revalidateHome();
     } catch (err) {
       setError(err.message);
       notify(err.message, "error");

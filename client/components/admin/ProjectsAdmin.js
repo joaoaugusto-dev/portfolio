@@ -2,17 +2,12 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getProjects, api } from "@/lib/api";
+import { revalidateHome } from "@/lib/actions";
 import { Spot, Toast, useToast } from "@/components/Fx";
 import CoverUpload from "@/components/admin/CoverUpload";
 import RichTextEditor from "@/components/admin/RichTextEditor";
 
 const empty = { title: "", description: "", imageUrl: "", link: "", featured: false, projectDate: "", order: 0 };
-
-// A home cacheia /api/projects por 60s (next: revalidate); sem isso, salvar
-// no admin não aparecia na home até o cache expirar sozinho.
-function revalidateHome() {
-  fetch("/api/revalidate", { method: "POST" }).catch(() => {});
-}
 
 const field =
   "w-full rounded-xl border border-white/10 bg-background px-3 py-2 outline-none transition-all duration-300 focus:border-accent focus:shadow-[0_0_0_4px_rgba(155,89,182,0.13)]";

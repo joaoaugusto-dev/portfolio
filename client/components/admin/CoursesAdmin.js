@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getCourses, api } from "@/lib/api";
+import { revalidateHome } from "@/lib/actions";
 import { Spot, Toast, useToast } from "@/components/Fx";
 import CoverUpload from "@/components/admin/CoverUpload";
 
@@ -60,6 +61,7 @@ export default function CoursesAdmin({ token }) {
     try {
       setCourses(await api.reorderCourses(token, courses.map((c) => c.id)));
       notify("Ordem salva");
+      revalidateHome();
     } catch (err) {
       setError(err.message);
       refresh();
@@ -92,6 +94,7 @@ export default function CoursesAdmin({ token }) {
       notify(editingId ? "Curso atualizado" : "Curso adicionado");
       resetForm();
       refresh();
+      revalidateHome();
     } catch (err) {
       setError(err.message);
       notify(err.message, "error");
@@ -105,6 +108,7 @@ export default function CoursesAdmin({ token }) {
     try {
       await api.deleteCourse(token, id);
       notify("Curso excluído");
+      revalidateHome();
     } catch (err) {
       setError(err.message);
       notify(err.message, "error");
