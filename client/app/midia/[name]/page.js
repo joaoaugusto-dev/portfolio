@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import VideoPlayer from "@/components/VideoPlayer";
+import MediaImage from "@/components/MediaImage";
 import { getMedia } from "@/lib/api";
 
 export async function generateMetadata({ params }) {
@@ -51,8 +52,7 @@ export default async function MediaPage({ params }) {
       <main className="mx-auto max-w-4xl px-6 py-12">
         <div className="flex items-center justify-center overflow-hidden rounded-2xl border border-white/5 bg-surface shadow-2xl shadow-black/40">
           {media.kind === "image" ? (
-            // eslint-disable-next-line @next/next/no-img-element -- servido pela API, sem otimização
-            <img src={media.url} alt={media.title} className="w-full h-auto" onContextMenu={(e) => e.preventDefault()} />
+            <MediaImage src={media.url} alt={media.title} />
           ) : media.kind === "video" ? (
             <VideoPlayer src={media.url} poster={media.posterUrl} title={media.title} />
           ) : media.kind === "pdf" ? (
