@@ -18,12 +18,9 @@ export default function Timeline({ items = [] }) {
   if (!items.length) return null;
 
   return (
-    <section id="jornada" className="scroll-mt-4 px-6 py-24">
+    <section id="jornada" className="scroll-mt-2 px-6 py-24">
       <div className="mx-auto max-w-4xl">
         <Reveal>
-          <p className="eyebrow mb-3 text-center">
-            <T pt="Linha do tempo" en="Timeline" />
-          </p>
           <h2 className="section-title mb-16 text-4xl font-bold">
             <T pt="Jornada" en="Journey" />
           </h2>

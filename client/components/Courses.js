@@ -12,12 +12,9 @@ export default function Courses({ courses = [] }) {
   if (!courses.length) return null;
 
   return (
-    <section id="cursos" className="scroll-mt-4 bg-surface/40 px-6 py-24">
+    <section id="cursos" className="scroll-mt-2 bg-surface/40 px-6 py-24">
       <div className="mx-auto max-w-4xl">
         <Reveal>
-          <p className="eyebrow mb-3 text-center">
-            <T pt="Fora da sala de aula" en="Outside the classroom" />
-          </p>
           <h2 className="section-title mb-12 text-4xl font-bold">
             <T pt="Cursos Complementares" en="Complementary Courses" />
           </h2>

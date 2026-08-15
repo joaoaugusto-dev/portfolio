@@ -41,12 +41,9 @@ export default function About({ githubRepoCount, fallbackProjectCount = 0, cours
   ];
 
   return (
-    <section id="sobre" className="scroll-mt-4 px-6 py-24">
+    <section id="sobre" className="scroll-mt-2 px-6 py-24">
       <div className="mx-auto max-w-3xl text-center">
         <Reveal>
-          <p className="eyebrow mb-3">
-            <T pt="Quem fala" en="Who's writing" />
-          </p>
           <h2 className="section-title mb-10 text-4xl font-bold">
             <T pt="Sobre Mim" en="About Me" />
           </h2>

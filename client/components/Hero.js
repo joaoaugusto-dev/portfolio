@@ -90,10 +90,6 @@ export default function Hero() {
         </div>
       </div>
 
-      <p className="rise eyebrow mb-4" style={{ animationDelay: "0.1s" }}>
-        <T pt="Olá, eu sou" en="Hello, I'm" />
-      </p>
-
       <h1 className="mb-5 text-[2.6rem] font-bold leading-[1.05] tracking-tight sm:text-7xl">
         <Letters text="João Augusto" />
         <br />

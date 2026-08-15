@@ -14,6 +14,7 @@ const GLYPHS = ["{}", "</>", ";", "$", "#", "()", "=>", "[]", "&&", "0", "1"];
 
 const links = [
   ["sobre", "Sobre", "About", "fa-solid fa-user"],
+  ["galeria", "Galeria", "Gallery", "fa-solid fa-images"],
   ["skills", "Habilidades", "Skills", "fa-solid fa-code"],
   ["projetos", "Projetos", "Projects", "fa-solid fa-diagram-project"],
   ["jornada", "Jornada", "Journey", "fa-solid fa-route"],

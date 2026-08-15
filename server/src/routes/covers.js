@@ -28,6 +28,9 @@ router.post("/", requireAuth, upload.single("file"), asyncRoute(async (req, res)
     .resize({ width: 1600, withoutEnlargement: true })
     .webp({ quality: 82 })
     .toBuffer();
+  // Lida do próprio webp final (não do buffer original): é o único jeito de ter
+  // certeza da largura/altura depois do resize, já rotacionado.
+  const { width, height } = await sharp(webp).metadata();
 
   try {
     await ensureRoom(webp.length);
@@ -40,8 +43,10 @@ router.post("/", requireAuth, upload.single("file"), asyncRoute(async (req, res)
   await addUsage(webp.length);
 
   // Sempre proxiado pelo nosso domínio (nunca a URL crua do R2) — mesmo padrão
-  // de /midia: o front nem precisa saber que existe um R2 por trás.
-  res.status(201).json({ url: `/api/covers/${key}` });
+  // de /midia: o front nem precisa saber que existe um R2 por trás. width/height
+  // (da imagem já redimensionada) deixam quem chama montar layout tipo colagem
+  // sem esperar a imagem carregar no navegador pra saber a proporção.
+  res.status(201).json({ url: `/api/covers/${key}`, width, height });
 }));
 
 // Público de propósito (capa de projeto/curso na home, sem auth) — mesma

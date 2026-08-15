@@ -12,12 +12,9 @@ export default function Skills() {
   const list = cat === "all" ? tech : tech.filter((t) => t.cat === cat);
 
   return (
-    <section id="skills" className="scroll-mt-4 bg-surface/30 px-6 py-24">
+    <section id="skills" className="scroll-mt-2 bg-surface/30 px-6 py-24">
       <div className="mx-auto max-w-4xl">
         <Reveal>
-          <p className="eyebrow mb-3 text-center">
-            <T pt="Ferramentas" en="Toolbox" />
-          </p>
           <h2 className="section-title mb-10 text-4xl font-bold">
             <T pt="Habilidades" en="Skills" />
           </h2>

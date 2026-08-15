@@ -7,6 +7,7 @@ const filesRouter = require("./routes/files");
 const coversRouter = require("./routes/covers");
 const coursesRouter = require("./routes/courses");
 const journeyRouter = require("./routes/journey");
+const galleryRouter = require("./routes/gallery");
 
 const app = express();
 
@@ -42,6 +43,7 @@ app.use("/api/files", filesRouter);
 app.use("/api/covers", coversRouter);
 app.use("/api/courses", coursesRouter);
 app.use("/api/journey", journeyRouter);
+app.use("/api/gallery", galleryRouter);
 
 // Rede de segurança: erro que escapou de um handler (asyncRoute captura a maioria,
 // mas isso cobre o resto) vira 500 pro cliente em vez de derrubar o processo.

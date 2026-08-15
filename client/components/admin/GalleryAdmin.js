@@ -1,14 +1,13 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getProjects, api } from "@/lib/api";
+import { getGallery, api } from "@/lib/api";
 import { Spot, Toast, useToast } from "@/components/Fx";
-import CoverUpload from "@/components/admin/CoverUpload";
-import RichTextEditor from "@/components/admin/RichTextEditor";
+import ImageCropUpload from "@/components/admin/ImageCropUpload";
 
-const empty = { title: "", description: "", imageUrl: "", link: "", featured: false, projectDate: "", order: 0 };
+const empty = { image: "", width: null, height: null, captionPt: "", captionEn: "" };
 
-// A home cacheia /api/projects por 60s (next: revalidate); sem isso, salvar
+// A home cacheia /api/gallery por 60s (next: revalidate); sem isso, salvar
 // no admin não aparecia na home até o cache expirar sozinho.
 function revalidateHome() {
   fetch("/api/revalidate", { method: "POST" }).catch(() => {});
@@ -17,8 +16,8 @@ function revalidateHome() {
 const field =
   "w-full rounded-xl border border-white/10 bg-background px-3 py-2 outline-none transition-all duration-300 focus:border-accent focus:shadow-[0_0_0_4px_rgba(155,89,182,0.13)]";
 
-export default function ProjectsAdmin({ token }) {
-  const [projects, setProjects] = useState([]);
+export default function GalleryAdmin({ token }) {
+  const [items, setItems] = useState([]);
   const [form, setForm] = useState(empty);
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState("");
@@ -31,21 +30,19 @@ export default function ProjectsAdmin({ token }) {
   async function refresh() {
     setLoading(true);
     try {
-      setProjects(await getProjects());
+      setItems(await getGallery());
       setError("");
     } catch (err) {
-      // Antes isso virava uma lista vazia em silêncio e parecia "não tem projeto".
-      setError(`Não consegui carregar os projetos: ${err.message}`);
+      setError(`Não consegui carregar a galeria: ${err.message}`);
     } finally {
       setLoading(false);
     }
   }
 
-  // Drag & drop nativo — reordena localmente e persiste a ordem ao soltar.
   function onDragEnter(to) {
     const from = dragFrom.current;
     if (from === null || from === to) return;
-    setProjects((list) => {
+    setItems((list) => {
       const next = [...list];
       next.splice(to, 0, ...next.splice(from, 1));
       return next;
@@ -58,7 +55,7 @@ export default function ProjectsAdmin({ token }) {
     dragFrom.current = null;
     setDragging(null);
     try {
-      setProjects(await api.reorderProjects(token, projects.map((p) => p.id)));
+      setItems(await api.reorderGalleryItems(token, items.map((it) => it.id)));
       notify("Ordem salva");
       revalidateHome();
     } catch (err) {
@@ -72,9 +69,9 @@ export default function ProjectsAdmin({ token }) {
     refresh();
   }, []);
 
-  function startEdit(p) {
-    setEditingId(p.id);
-    setForm({ ...p, projectDate: p.projectDate?.slice(0, 10) });
+  function startEdit(it) {
+    setEditingId(it.id);
+    setForm({ ...empty, ...it });
     scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -85,13 +82,16 @@ export default function ProjectsAdmin({ token }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (!form.image) {
+      setError("Escolha uma foto antes de salvar.");
+      return;
+    }
     setError("");
     setSaving(true);
     try {
-      // Sem campo "Ordem" no formulário: projeto novo entra no fim, depois é arrastado.
-      if (editingId) await api.updateProject(token, editingId, form);
-      else await api.createProject(token, { ...form, order: projects.length });
-      notify(editingId ? "Projeto atualizado" : "Projeto adicionado");
+      if (editingId) await api.updateGalleryItem(token, editingId, form);
+      else await api.createGalleryItem(token, { ...form, order: items.length });
+      notify(editingId ? "Foto atualizada" : "Foto adicionada");
       resetForm();
       refresh();
       revalidateHome();
@@ -104,10 +104,10 @@ export default function ProjectsAdmin({ token }) {
   }
 
   async function handleDelete(id) {
-    if (!confirm("Excluir este projeto?")) return;
+    if (!confirm("Excluir esta foto?")) return;
     try {
-      await api.deleteProject(token, id);
-      notify("Projeto excluído");
+      await api.deleteGalleryItem(token, id);
+      notify("Foto excluída");
       revalidateHome();
     } catch (err) {
       setError(err.message);
@@ -125,79 +125,39 @@ export default function ProjectsAdmin({ token }) {
       >
         <h2 className="flex items-center gap-2 text-lg font-semibold">
           <i className={`fa-solid ${editingId ? "fa-pen" : "fa-plus"} text-accent-2`} aria-hidden />
-          {editingId ? "Editar projeto" : "Novo projeto"}
+          {editingId ? "Editar foto" : "Nova foto"}
         </h2>
 
-        <div>
-          <label className="mb-1 block text-sm text-muted">Título</label>
-          <input
-            required
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-            className={field}
-          />
-        </div>
-
-        <div>
-          <label className="mb-1 block text-sm text-muted">Descrição</label>
-          <RichTextEditor
-            value={form.description}
-            onChange={(html) => setForm({ ...form, description: html })}
-          />
-        </div>
-
-        <CoverUpload
+        <ImageCropUpload
           token={token}
-          value={form.imageUrl}
-          onChange={(imageUrl) => setForm({ ...form, imageUrl })}
+          value={form.image}
+          onChange={(image, meta = {}) => setForm({ ...form, image, width: meta.width ?? null, height: meta.height ?? null })}
         />
+        <p className="-mt-2 text-xs text-muted">
+          A colagem no site se encaixa sozinha pela proporção de cada foto — não precisa cortar pra
+          um formato fixo.
+        </p>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm text-muted">Link do projeto</label>
+            <label className="mb-1 block text-sm text-muted">Legenda (PT)</label>
             <input
-              required
-              value={form.link}
-              onChange={(e) => setForm({ ...form, link: e.target.value })}
+              value={form.captionPt}
+              onChange={(e) => setForm({ ...form, captionPt: e.target.value })}
+              placeholder="Opcional"
               className={field}
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-muted">Data</label>
+            <label className="mb-1 block text-sm text-muted">Legenda (EN)</label>
             <input
-              type="date"
-              required
-              value={form.projectDate}
-              onChange={(e) => setForm({ ...form, projectDate: e.target.value })}
+              value={form.captionEn}
+              onChange={(e) => setForm({ ...form, captionEn: e.target.value })}
+              placeholder="Opcional"
               className={field}
             />
           </div>
         </div>
-
-        {/* Interruptor no lugar do checkbox: o estado se lê de longe. */}
-        <button
-          type="button"
-          onClick={() => setForm({ ...form, featured: !form.featured })}
-          aria-pressed={form.featured}
-          className="flex w-full items-center justify-between rounded-xl border border-white/10 px-4 py-3 text-sm transition-colors hover:border-accent/50"
-        >
-          <span className="flex items-center gap-2">
-            <i
-              className={`fa-solid fa-star ${form.featured ? "text-accent-2" : "text-muted/40"}`}
-              aria-hidden
-            />
-            Projeto destaque
-          </span>
-          <span
-            className={`flex h-6 w-11 items-center rounded-full p-0.5 transition-colors ${
-              form.featured ? "bg-accent" : "bg-white/10"
-            }`}
-          >
-            <motion.span layout transition={{ type: "spring", stiffness: 500, damping: 32 }}
-              className={`h-5 w-5 rounded-full bg-white ${form.featured ? "ml-auto" : ""}`}
-            />
-          </span>
-        </button>
 
         {error && <p className="text-sm text-red-400">{error}</p>}
 
@@ -208,7 +168,7 @@ export default function ProjectsAdmin({ token }) {
             className="btn btn-primary sheen flex-1 py-2.5 text-sm disabled:opacity-50"
           >
             {saving && <i className="fa-solid fa-circle-notch fa-spin" aria-hidden />}
-            {editingId ? "Salvar alterações" : "Adicionar projeto"}
+            {editingId ? "Salvar alterações" : "Adicionar foto"}
           </button>
           {editingId && (
             <button type="button" onClick={resetForm} className="btn btn-ghost py-2.5 text-sm">
@@ -220,22 +180,20 @@ export default function ProjectsAdmin({ token }) {
 
       <div className="space-y-3">
         <h2 className="text-lg font-semibold">
-          Projetos <span className="text-muted">({projects.length})</span>
+          Galeria <span className="text-muted">({items.length})</span>
         </h2>
         <p className="-mt-1 text-xs text-muted">
-          Arraste pelo <i className="fa-solid fa-grip-vertical" aria-hidden /> para mudar a posição no
-          modo &quot;Relevância&quot; do site. O modo &quot;Data&quot; usa a data do projeto.
+          Arraste pelo <i className="fa-solid fa-grip-vertical" aria-hidden /> para mudar a posição na
+          seção do site.
         </p>
 
         {loading &&
-          [0, 1, 2].map((i) => (
-            <div key={i} className="h-[4.5rem] animate-pulse rounded-xl bg-surface/70" />
-          ))}
+          [0, 1].map((i) => <div key={i} className="h-[4.5rem] animate-pulse rounded-xl bg-surface/70" />)}
 
         <AnimatePresence initial={false}>
-          {projects.map((p, i) => (
+          {items.map((it, i) => (
             <motion.div
-              key={p.id}
+              key={it.id}
               layout={dragging === null}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -261,9 +219,9 @@ export default function ProjectsAdmin({ token }) {
                 <i className="fa-solid fa-grip-vertical" aria-hidden />
               </span>
 
-              {p.imageUrl ? (
+              {it.image ? (
                 // eslint-disable-next-line @next/next/no-img-element -- miniatura da API, sem otimização
-                <img src={p.imageUrl} alt="" className="h-11 w-16 shrink-0 rounded-lg object-cover" />
+                <img src={it.image} alt="" className="h-11 w-16 shrink-0 rounded-lg object-cover" />
               ) : (
                 <span className="flex h-11 w-16 shrink-0 items-center justify-center rounded-lg bg-background text-muted">
                   <i className="fa-solid fa-image" aria-hidden />
@@ -271,25 +229,20 @@ export default function ProjectsAdmin({ token }) {
               )}
 
               <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1.5 truncate font-medium">
-                  {p.featured && <i className="fa-solid fa-star text-xs text-accent-2" aria-hidden />}
-                  {p.title}
-                </p>
-                <p className="text-xs text-muted">
-                  {p.projectDate?.slice(0, 10)} · posição {i + 1}
-                </p>
+                <p className="truncate font-medium">{it.captionPt || "Sem legenda"}</p>
+                <p className="text-xs text-muted">posição {i + 1}</p>
               </div>
 
               <div className="flex shrink-0 gap-1.5">
                 <button
-                  onClick={() => startEdit(p)}
+                  onClick={() => startEdit(it)}
                   aria-label="Editar"
                   className="h-9 w-9 rounded-lg border border-white/10 text-sm transition-colors hover:border-accent hover:text-accent-2"
                 >
                   <i className="fa-solid fa-pen" aria-hidden />
                 </button>
                 <button
-                  onClick={() => handleDelete(p.id)}
+                  onClick={() => handleDelete(it.id)}
                   aria-label="Excluir"
                   className="h-9 w-9 rounded-lg border border-red-500/30 text-sm text-red-400 transition-colors hover:bg-red-500/10"
                 >
@@ -300,9 +253,9 @@ export default function ProjectsAdmin({ token }) {
           ))}
         </AnimatePresence>
 
-        {!loading && !projects.length && (
+        {!loading && !items.length && (
           <p className="rounded-xl border border-dashed border-white/10 py-10 text-center text-sm text-muted">
-            Nenhum projeto ainda. Adicione o primeiro ao lado.
+            Nenhuma foto ainda. Adicione a primeira ao lado.
           </p>
         )}
       </div>

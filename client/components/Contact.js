@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Reveal from "./Reveal";
-import SocialLinks from "./SocialLinks";
+import SocialLinks, { socials } from "./SocialLinks";
 import { T } from "./I18n";
 import { Magnetic } from "./Fx";
 
@@ -20,7 +20,7 @@ export default function Contact() {
   }
 
   return (
-    <section id="contato" className="relative scroll-mt-4 overflow-hidden bg-surface/40 px-6 py-24 text-center">
+    <section id="contato" className="relative scroll-mt-2 overflow-hidden bg-surface/40 px-6 py-24 text-center">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 -z-10"
@@ -29,20 +29,10 @@ export default function Contact() {
         }}
       />
       <Reveal>
-        <p className="eyebrow mb-3">
-          <T pt="Próximo passo" en="Next step" />
-        </p>
         <h2 className="section-title mb-6 text-4xl font-bold">
           <T pt="Vamos Conversar?" en="Let's Talk?" />
         </h2>
-        <p className="mb-9 text-lg text-muted">
-          <T
-            pt="Estou aberto a oportunidades e parcerias."
-            en="I'm open to opportunities and partnerships."
-          />
-        </p>
-
-        <div className="flex flex-wrap items-center justify-center gap-3">
+        <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
           <Magnetic strength={0.35}>
             <a
               href="https://wa.me/5519994943031"
@@ -79,7 +69,7 @@ export default function Contact() {
         <p className="mb-5 mt-12 text-base text-accent-2">
           <T pt="Ou me encontre em:" en="Or find me at:" />
         </p>
-        <SocialLinks large />
+        <SocialLinks large items={socials.filter((s) => s.label !== "WhatsApp" && s.label !== "Email")} />
       </Reveal>
     </section>
   );

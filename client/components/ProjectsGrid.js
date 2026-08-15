@@ -24,12 +24,9 @@ export default function ProjectsGrid({ projects }) {
   }, [projects, sortBy]);
 
   return (
-    <section id="projetos" className="scroll-mt-4 px-6 py-24">
+    <section id="projetos" className="scroll-mt-2 px-6 py-24">
       <div className="mx-auto max-w-6xl">
         <Reveal>
-          <p className="eyebrow mb-3 text-center">
-            <T pt="O que eu construí" en="What I've built" />
-          </p>
           <h2 className="section-title mb-10 text-4xl font-bold">
             <T pt="Meus Projetos" en="My Projects" />
           </h2>

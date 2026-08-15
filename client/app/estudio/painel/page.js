@@ -8,11 +8,13 @@ import ProjectsAdmin from "@/components/admin/ProjectsAdmin";
 import FilesAdmin from "@/components/admin/FilesAdmin";
 import CoursesAdmin from "@/components/admin/CoursesAdmin";
 import JourneyAdmin from "@/components/admin/JourneyAdmin";
+import GalleryAdmin from "@/components/admin/GalleryAdmin";
 
 const ADMIN_PATH = process.env.NEXT_PUBLIC_ADMIN_PATH || "estudio";
 
 const tabs = [
   ["projects", "Projetos", "fa-solid fa-diagram-project"],
+  ["gallery", "Galeria", "fa-solid fa-images"],
   ["courses", "Cursos", "fa-solid fa-graduation-cap"],
   ["journey", "Jornada", "fa-solid fa-route"],
   ["files", "Arquivos", "fa-solid fa-folder-open"],
@@ -90,6 +92,7 @@ export default function Dashboard() {
           transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
         >
           {tab === "projects" && <ProjectsAdmin token={session.access_token} />}
+          {tab === "gallery" && <GalleryAdmin token={session.access_token} />}
           {tab === "courses" && <CoursesAdmin token={session.access_token} />}
           {tab === "journey" && <JourneyAdmin token={session.access_token} />}
           {tab === "files" && <FilesAdmin token={session.access_token} />}

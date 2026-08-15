@@ -26,6 +26,12 @@ export async function getJourney() {
   return res.json();
 }
 
+export async function getGallery() {
+  const res = await fetch(`${API_URL}/api/gallery`, { next: { revalidate: 60 } });
+  if (!res.ok) throw new Error("Failed to load gallery");
+  return res.json();
+}
+
 export async function getGithubStats(username = "joaoaugusto-dev") {
   const res = await fetch(`https://api.github.com/users/${username}`, { next: { revalidate: 3600 } });
   if (!res.ok) throw new Error("Failed to load GitHub stats");
@@ -75,6 +81,14 @@ export const api = {
     authedFetch(`/api/journey/${id}`, token, { method: "DELETE" }),
   reorderJourneyItems: (token, ids) =>
     authedFetch("/api/journey/reorder", token, { method: "PUT", body: JSON.stringify({ ids }) }),
+  createGalleryItem: (token, data) =>
+    authedFetch("/api/gallery", token, { method: "POST", body: JSON.stringify(data) }),
+  updateGalleryItem: (token, id, data) =>
+    authedFetch(`/api/gallery/${id}`, token, { method: "PUT", body: JSON.stringify(data) }),
+  deleteGalleryItem: (token, id) =>
+    authedFetch(`/api/gallery/${id}`, token, { method: "DELETE" }),
+  reorderGalleryItems: (token, ids) =>
+    authedFetch("/api/gallery/reorder", token, { method: "PUT", body: JSON.stringify({ ids }) }),
   uploadCover: (token, file) => {
     const form = new FormData();
     form.append("file", file);
