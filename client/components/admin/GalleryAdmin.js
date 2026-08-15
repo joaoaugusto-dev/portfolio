@@ -7,7 +7,7 @@ import useDragReorder from "@/lib/useDragReorder";
 import { Spot, Toast, useToast } from "@/components/Fx";
 import ImageCropUpload from "@/components/admin/ImageCropUpload";
 
-const empty = { image: "", width: null, height: null, captionPt: "", captionEn: "" };
+const empty = { image: "", width: null, height: null, captionPt: "", captionEn: "", eventName: "", eventDate: "" };
 
 const field =
   "w-full rounded-xl border border-white/10 bg-background px-3 py-2 outline-none transition-all duration-300 focus:border-accent focus:shadow-[0_0_0_4px_rgba(155,89,182,0.13)]";
@@ -52,7 +52,7 @@ export default function GalleryAdmin({ token }) {
 
   function startEdit(it) {
     setEditingId(it.id);
-    setForm({ ...empty, ...it });
+    setForm({ ...empty, ...it, eventDate: it.eventDate?.slice(0, 10) || "" });
     scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -121,6 +121,27 @@ export default function GalleryAdmin({ token }) {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
+            <label className="mb-1 block text-sm text-muted">Evento / projeto</label>
+            <input
+              value={form.eventName}
+              onChange={(e) => setForm({ ...form, eventName: e.target.value })}
+              placeholder="Opcional — agrupa fotos do mesmo evento na home"
+              className={field}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-muted">Data do evento</label>
+            <input
+              type="date"
+              value={form.eventDate}
+              onChange={(e) => setForm({ ...form, eventDate: e.target.value })}
+              className={field}
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
             <label className="mb-1 block text-sm text-muted">Legenda (PT)</label>
             <input
               value={form.captionPt}
@@ -165,7 +186,7 @@ export default function GalleryAdmin({ token }) {
         </h2>
         <p className="-mt-1 text-xs text-muted">
           Arraste pelo <i className="fa-solid fa-grip-vertical" aria-hidden /> para mudar a posição na
-          seção do site.
+          seção do site. Fotos consecutivas com o mesmo evento viram uma seção com título na home.
         </p>
 
         {loading &&
@@ -206,8 +227,10 @@ export default function GalleryAdmin({ token }) {
               )}
 
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{it.captionPt || "Sem legenda"}</p>
-                <p className="text-xs text-muted">posição {i + 1}</p>
+                <p className="truncate font-medium">{it.eventName || "Sem evento"}</p>
+                <p className="text-xs text-muted">
+                  {it.eventDate?.slice(0, 10) || "sem data"} · posição {i + 1}
+                </p>
               </div>
 
               <div className="flex shrink-0 gap-1.5">

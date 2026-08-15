@@ -5,6 +5,10 @@ const GalleryItem = sequelize.define("GalleryItem", {
   image: { type: DataTypes.STRING, allowNull: false },
   captionPt: { type: DataTypes.STRING },
   captionEn: { type: DataTypes.STRING },
+  // Nome do evento/projeto e data — fotos com o mesmo par viram uma seção com
+  // título na home (ver Gallery.js); vazio (fotos antigas) continua sem título.
+  eventName: { type: DataTypes.STRING },
+  eventDate: { type: DataTypes.DATEONLY },
   // Dimensões da imagem já enviada — a colagem do site usa isso pra reservar a
   // altura certa de cada foto (proporção original, sem forçar corte) e encaixar
   // tudo tipo mosaico, sem esperar a imagem carregar pra saber o formato.
