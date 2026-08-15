@@ -2,8 +2,10 @@ name: Keep API alive
 
 on:
   schedule:
-    # a cada 10 min — plano free do Render dorme depois de 15 min sem tráfego
-    - cron: "*/10 * * * *"
+    # a cada 8 min — plano free do Render dorme depois de 15 min sem tráfego.
+    # O cron do GitHub Actions tem folga (não dispara no segundo exato), então
+    # a margem de 8 min (não os 15 completos) é o que sobra pra absorver isso.
+    - cron: "*/8 * * * *"
   workflow_dispatch:
 
 jobs:
