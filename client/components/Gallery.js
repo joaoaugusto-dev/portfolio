@@ -34,11 +34,13 @@ function formatEventDate(dateStr, lang) {
 }
 
 function Mosaic({ items, onZoom }) {
-  // Colunas nativas do CSS sempre reservam N trilhas, mesmo com poucas fotos —
-  // sem isso, 1 ou 2 fotos ficam grudadas na esquerda em vez de centralizadas.
-  const cols = Math.min(items.length, 3);
-  const colsClass = cols >= 3 ? "columns-2 sm:columns-3" : cols === 2 ? "columns-2" : "columns-1";
-  const maxWidth = cols === 1 ? "max-w-sm" : cols === 2 ? "max-w-2xl" : "max-w-3xl";
+  // No máximo 2 colunas — agora que cada seção já é um evento (geralmente
+  // poucas fotos), 3 colunas ficava largo demais. Colunas nativas do CSS
+  // sempre reservam N trilhas, mesmo com poucas fotos — sem isso, 1 foto
+  // ficaria grudada na esquerda em vez de centralizada.
+  const cols = Math.min(items.length, 2);
+  const colsClass = cols === 2 ? "columns-2" : "columns-1";
+  const maxWidth = cols === 2 ? "max-w-2xl" : "max-w-sm";
 
   return (
     <div className={`mx-auto ${colsClass} ${maxWidth} gap-3 sm:gap-4`}>
