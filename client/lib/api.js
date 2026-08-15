@@ -81,34 +81,35 @@ export const api = {
     return authedFetch("/api/covers", token, { method: "POST", body: form });
   },
   listFiles: (token) => authedFetch("/api/files", token),
-  // XHR em vez de fetch: é o único jeito de ler progresso real de bytes enviados
-  // (fetch não expõe upload progress em todo navegador relevante).
-  uploadFile: (token, file, { name, title, description } = {}, onProgress) => {
-    const form = new FormData();
-    form.append("file", file);
-    if (name) form.append("name", name);
-    if (title) form.append("title", title);
-    if (description) form.append("description", description);
+  getStorageUsage: (token) => authedFetch("/api/files/usage", token),
+  // O arquivo vai direto do navegador pro R2 (URL assinada) — nunca passa pela
+  // memória do servidor, essencial pra vídeo grande não derrubar o Render. XHR
+  // em vez de fetch pro PUT porque é o único jeito de ler progresso real de
+  // bytes enviados (fetch não expõe upload progress em todo navegador relevante).
+  uploadFile: async (token, file, { name, title, description } = {}, onProgress) => {
+    const presign = await authedFetch("/api/files/presign", token, {
+      method: "POST",
+      body: JSON.stringify({ filename: file.name, mimetype: file.type || "application/octet-stream", size: file.size, name }),
+    });
 
-    return new Promise((resolve, reject) => {
+    await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open("POST", `${API_URL}/api/files`);
-      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      xhr.open("PUT", presign.uploadUrl);
+      xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) onProgress?.(e.loaded, e.total);
       };
       xhr.onload = () => {
-        let body = {};
-        try {
-          body = JSON.parse(xhr.responseText);
-        } catch {
-          // resposta vazia (204) ou não-JSON
-        }
-        if (xhr.status >= 200 && xhr.status < 300) resolve(body);
-        else reject(new Error(body.error || `Request failed (${xhr.status})`));
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error(`Falha ao enviar pro storage (${xhr.status})`));
       };
       xhr.onerror = () => reject(new Error("Falha de rede no upload"));
-      xhr.send(form);
+      xhr.send(file);
+    });
+
+    return authedFetch("/api/files/complete", token, {
+      method: "POST",
+      body: JSON.stringify({ name: presign.name, title, description }),
     });
   },
   updateFile: (token, name, data) =>
@@ -118,4 +119,13 @@ export const api = {
     }),
   deleteFile: (token, name) =>
     authedFetch(`/api/files/${encodeURIComponent(name)}`, token, { method: "DELETE" }),
+  // `image`: Blob/File pra usar como miniatura direto. `atSeconds`: pede pro
+  // servidor recortar o frame nesse instante do vídeo já enviado (alternativa
+  // caso o recorte no browser, via canvas, não seja possível).
+  setPoster: (token, name, { image, atSeconds } = {}) => {
+    const form = new FormData();
+    if (image) form.append("file", image, "poster.jpg");
+    if (atSeconds != null) form.append("atSeconds", String(atSeconds));
+    return authedFetch(`/api/files/${encodeURIComponent(name)}/poster`, token, { method: "POST", body: form });
+  },
 };

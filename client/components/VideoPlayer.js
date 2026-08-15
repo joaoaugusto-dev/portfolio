@@ -9,7 +9,7 @@ const fmt = (s) => {
   return `${m}:${String(r).padStart(2, "0")}`;
 };
 
-export default function VideoPlayer({ src, title }) {
+export default function VideoPlayer({ src, poster, title }) {
   const videoRef = useRef(null);
   const barRef = useRef(null);
   const hideTimer = useRef(null);
@@ -104,8 +104,10 @@ export default function VideoPlayer({ src, title }) {
       <video
         ref={videoRef}
         src={src}
+        poster={poster}
         className="w-full h-full"
         playsInline
+        preload="metadata"
         onVolumeChange={(e) => {
           setVolume(e.target.volume);
           setMuted(e.target.muted);

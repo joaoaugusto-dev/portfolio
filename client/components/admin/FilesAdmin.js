@@ -52,6 +52,8 @@ export default function FilesAdmin({ token }) {
   const [copiedName, setCopiedName] = useState("");
   const [form, setForm] = useState({ name: "", title: "", description: "" });
   const [editing, setEditing] = useState(null); // { name, title, description }
+  const [posterEditing, setPosterEditing] = useState(null); // arquivo (kind video)
+  const [usage, setUsage] = useState(null); // { bytesUsed, capBytes }
   const inputRef = useRef(null);
   const [toast, notify] = useToast();
 
@@ -60,6 +62,7 @@ export default function FilesAdmin({ token }) {
       setError(err.message);
       return [];
     }));
+    setUsage(await api.getStorageUsage(token).catch(() => null));
   }
 
   useEffect(() => {
@@ -73,21 +76,23 @@ export default function FilesAdmin({ token }) {
     const totalBytes = list.reduce((sum, f) => sum + f.size, 0);
     setProgress({ index: 0, count: list.length, fileName: list[0].name, loaded: 0, total: totalBytes, phase: "uploading" });
     setError("");
+    let uploadedVideo = null; // só faz sentido oferecer a escolha de miniatura pra 1 vídeo por vez
     try {
       // Nome/título/descrição valem pra um arquivo por vez; em lote usa o nome original.
       let sentBefore = 0;
       for (let i = 0; i < list.length; i++) {
         const file = list[i];
         setProgress((p) => ({ ...p, index: i, fileName: file.name, phase: "uploading" }));
-        await api.uploadFile(token, file, list.length === 1 ? form : {}, (loaded, fileTotal) => {
+        const created = await api.uploadFile(token, file, list.length === 1 ? form : {}, (loaded, fileTotal) => {
           setProgress((p) => ({
             ...p,
             loaded: sentBefore + loaded,
-            // request body inteiro já saiu, mas a resposta ainda não voltou: o server
-            // está processando (upload pro Supabase Storage) — daí pra frente é indeterminado.
+            // bytes todos no R2, mas falta confirmar (/complete) e, se for vídeo,
+            // gerar a miniatura no servidor — daí pra frente é indeterminado.
             phase: loaded >= fileTotal ? "processing" : "uploading",
           }));
         });
+        if (list.length === 1 && created?.kind === "video") uploadedVideo = created;
         sentBefore += file.size;
       }
       setForm({ name: "", title: "", description: "" });
@@ -99,6 +104,10 @@ export default function FilesAdmin({ token }) {
     } finally {
       setProgress(null);
     }
+    // Direto pro escolhedor de miniatura assim que o vídeo termina de subir, em
+    // vez de deixar só pro botão de editar depois — o servidor já gerou uma
+    // (frame automático em 1s), então aqui é ajustar, não um passo obrigatório.
+    if (uploadedVideo) setPosterEditing(uploadedVideo);
   }
 
   async function handleDelete(name) {
@@ -140,8 +149,29 @@ export default function FilesAdmin({ token }) {
   const uploading = !!progress;
   const uploadPct = progress?.total ? Math.min(100, Math.round((progress.loaded / progress.total) * 100)) : 0;
 
+  const usagePct = usage ? Math.min(100, (usage.bytesUsed / usage.capBytes) * 100) : 0;
+
   return (
     <div>
+      {usage && (
+        <div className="mb-4 space-y-1.5 rounded-xl border border-white/5 bg-surface px-4 py-3">
+          <div className="flex items-center justify-between text-xs text-muted">
+            <span>Armazenamento (R2)</span>
+            <span className={usagePct > 90 ? "font-medium text-red-400" : ""}>
+              {formatSize(usage.bytesUsed)} de {formatSize(usage.capBytes)}
+            </span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+            <div
+              className={`h-full rounded-full transition-[width] duration-300 ${
+                usagePct > 90 ? "bg-red-400" : "bg-gradient-to-r from-accent to-accent-2"
+              }`}
+              style={{ width: `${usagePct}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       <Spot className="mb-4 space-y-3 border border-white/5 bg-surface p-5">
         <p className="text-sm text-muted">
           Preenchido antes de enviar. Vale para um arquivo por vez — em lote, cada um usa o
@@ -250,9 +280,9 @@ export default function FilesAdmin({ token }) {
               transition={{ type: "spring", stiffness: 400, damping: 36 }}
               className="flex flex-wrap items-center gap-3 rounded-xl border border-white/5 bg-surface px-4 py-3 transition-colors hover:border-accent/40"
             >
-              {f.kind === "image" ? (
+              {f.kind === "image" || (f.kind === "video" && f.posterUrl) ? (
                 // eslint-disable-next-line @next/next/no-img-element -- miniatura da API, sem otimização
-                <img src={f.url} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
+                <img src={f.kind === "image" ? f.url : f.posterUrl} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
               ) : (
                 <i className={`${iconOf(f.kind)} w-9 shrink-0 text-center text-xl text-accent-2`} aria-hidden />
               )}
@@ -285,6 +315,16 @@ export default function FilesAdmin({ token }) {
                 >
                   <i className="fa-solid fa-pen" aria-hidden />
                 </button>
+                {f.kind === "video" && (
+                  <button
+                    onClick={() => setPosterEditing(f)}
+                    aria-label="Escolher miniatura"
+                    title="Escolher miniatura"
+                    className="h-9 w-9 rounded-lg border border-white/10 text-xs transition-colors hover:border-accent hover:text-accent-2"
+                  >
+                    <i className="fa-solid fa-image" aria-hidden />
+                  </button>
+                )}
                 <button
                   onClick={() => copy(f, f.pageUrl)}
                   title="Link da página, pra compartilhar"
@@ -435,7 +475,264 @@ export default function FilesAdmin({ token }) {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {posterEditing && (
+          <PosterPicker
+            file={posterEditing}
+            token={token}
+            notify={notify}
+            onClose={() => setPosterEditing(null)}
+            onSaved={(media) => {
+              setFiles((fs) => fs.map((x) => (x.name === media.name ? { ...x, ...media } : x)));
+              setPosterEditing(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
       <Toast toast={toast} />
     </div>
+  );
+}
+
+const fmtTime = (s) => {
+  if (!Number.isFinite(s)) return "0:00";
+  const m = Math.floor(s / 60);
+  const r = Math.floor(s % 60);
+  return `${m}:${String(r).padStart(2, "0")}`;
+};
+
+// Modal de miniatura: ou arrasta a linha do tempo do próprio vídeo (o frame
+// atual é recortado no browser via canvas — nada de vídeo sobe de novo pro
+// servidor), ou envia uma imagem pronta. Os dois caminhos terminam comprimidos
+// no servidor (setPoster -> sharp), então o que sobe daqui pode vir cru.
+// Espera o vídeo terminar de buscar um instante — seek em <video> é assíncrono
+// (decodifica até o keyframe mais próximo e vem andando), por isso não dá pra
+// só setar currentTime e ler na sequência.
+function seekTo(video, t) {
+  return new Promise((resolve) => {
+    const onSeeked = () => {
+      video.removeEventListener("seeked", onSeeked);
+      resolve();
+    };
+    video.addEventListener("seeked", onSeeked);
+    video.currentTime = t;
+  });
+}
+
+// Pré-renderiza uma tira de miniaturas em baixa resolução ANTES de liberar o
+// scrub: arrastar a régua sobre o <video> ao vivo trava (cada tick é um seek
+// real, que decodifica desde o keyframe anterior). Arrastando sobre esse
+// array, é só trocar qual <img> aparece — instantâneo.
+async function buildStrip(video, duration, onProgress) {
+  const count = Math.max(8, Math.min(60, Math.round(duration * 2)));
+  const times = Array.from({ length: count }, (_, i) => (duration * i) / Math.max(1, count - 1));
+  const w = 160;
+  const h = Math.round(w * ((video.videoHeight || 9) / (video.videoWidth || 16))) || 90;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  const frames = [];
+  for (let i = 0; i < times.length; i++) {
+    await seekTo(video, times[i]);
+    ctx.drawImage(video, 0, 0, w, h);
+    frames.push(canvas.toDataURL("image/jpeg", 0.55));
+    onProgress((i + 1) / times.length);
+  }
+  return { frames, times };
+}
+
+function PosterPicker({ file, token, onClose, onSaved, notify }) {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const objectUrlRef = useRef(null);
+  const [ready, setReady] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [strip, setStrip] = useState(null); // { frames, times }
+  const [prepPct, setPrepPct] = useState(0);
+  const [index, setIndex] = useState(0);
+  const [mode, setMode] = useState("frame"); // "frame" | "upload"
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadPreview, setUploadPreview] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!ready || strip) return;
+    let cancelled = false;
+    buildStrip(videoRef.current, duration, (pct) => !cancelled && setPrepPct(pct)).then((s) => {
+      if (!cancelled) {
+        setStrip(s);
+        setIndex(Math.min(1, s.frames.length - 1)); // não o 1º: costuma vir preto/em transição
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só depende de ready virar true uma vez
+  }, [ready]);
+
+  function pickUpload(f) {
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    if (!f) {
+      setUploadFile(null);
+      setUploadPreview("");
+      return;
+    }
+    const url = URL.createObjectURL(f);
+    objectUrlRef.current = url;
+    setUploadFile(f);
+    setUploadPreview(url);
+  }
+
+  useEffect(() => () => objectUrlRef.current && URL.revokeObjectURL(objectUrlRef.current), []);
+
+  async function save() {
+    setSaving(true);
+    try {
+      let image;
+      if (mode === "upload") {
+        if (!uploadFile) throw new Error("Escolha uma imagem");
+        image = uploadFile;
+      } else {
+        const v = videoRef.current;
+        const canvas = canvasRef.current;
+        // Recorte final em resolução cheia: a tira de scrub é só pré-visualização.
+        await seekTo(v, strip.times[index]);
+        canvas.width = v.videoWidth;
+        canvas.height = v.videoHeight;
+        canvas.getContext("2d").drawImage(v, 0, 0);
+        image = await new Promise((resolve, reject) =>
+          canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Falha ao capturar o frame"))), "image/jpeg", 0.92)
+        );
+      }
+      const media = await api.setPoster(token, file.name, { image });
+      notify("Miniatura atualizada");
+      onSaved(media);
+    } catch (err) {
+      notify(err.message, "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm"
+    >
+      <motion.div
+        initial={{ scale: 0.94, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.96, y: 10 }}
+        transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-lg space-y-4 rounded-2xl border border-white/10 bg-surface p-6"
+      >
+        <h3 className="font-semibold">Miniatura de {file.title}</h3>
+
+        {file.posterUrl && (
+          <div className="flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element -- miniatura atual, sem otimização */}
+            <img src={file.posterUrl} alt="" className="h-12 w-20 shrink-0 rounded-lg object-cover" />
+            <p className="text-xs text-muted">Miniatura atual — escolha outra abaixo pra trocar.</p>
+          </div>
+        )}
+
+        <div className="flex gap-1 rounded-xl border border-white/10 bg-background/60 p-1 text-sm">
+          <button
+            type="button"
+            onClick={() => setMode("frame")}
+            data-on={mode === "frame"}
+            className="pill flex-1"
+          >
+            Escolher frame
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("upload")}
+            data-on={mode === "upload"}
+            className="pill flex-1"
+          >
+            Enviar imagem
+          </button>
+        </div>
+
+        {mode === "frame" ? (
+          <div className="space-y-2">
+            <div className="relative aspect-video overflow-hidden rounded-xl bg-black">
+              {/* O <video> real só serve pra gerar a tira e pro recorte final em alta
+                  resolução — quem aparece na tela durante o arraste é sempre a tira. */}
+              <video
+                ref={videoRef}
+                src={file.url}
+                muted
+                playsInline
+                preload="auto"
+                className="absolute inset-0 h-full w-full opacity-0"
+                onLoadedMetadata={(e) => {
+                  setDuration(e.currentTarget.duration);
+                  setReady(true);
+                }}
+              />
+              {strip ? (
+                // eslint-disable-next-line @next/next/no-img-element -- data URL local, sem otimização
+                <img src={strip.frames[index]} alt="" className="absolute inset-0 h-full w-full object-contain" />
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-xs text-muted">
+                  <i className="fa-solid fa-circle-notch fa-spin text-lg text-accent-2" aria-hidden />
+                  <span>Preparando pré-visualização... {Math.round(prepPct * 100)}%</span>
+                </div>
+              )}
+            </div>
+            <input
+              type="range"
+              min="0"
+              max={strip ? strip.frames.length - 1 : 0}
+              step="1"
+              value={index}
+              disabled={!strip}
+              onChange={(e) => setIndex(Number(e.target.value))}
+              className="w-full accent-[var(--accent-2)]"
+            />
+            <p className="text-center text-xs tabular-nums text-muted">
+              {fmtTime(strip ? strip.times[index] : 0)} / {fmtTime(duration)}
+            </p>
+            <canvas ref={canvasRef} hidden />
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <label
+              className="flex aspect-video cursor-pointer items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-white/15 bg-black hover:border-accent/60"
+            >
+              <input type="file" accept="image/*" hidden onChange={(e) => pickUpload(e.target.files?.[0] || null)} />
+              {uploadPreview ? (
+                // eslint-disable-next-line @next/next/no-img-element -- preview local, sem otimização
+                <img src={uploadPreview} alt="" className="h-full w-full object-contain" />
+              ) : (
+                <span className="text-sm text-muted">Clique para escolher uma imagem</span>
+              )}
+            </label>
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving || (mode === "frame" ? !strip : !uploadFile)}
+            className="btn btn-primary sheen py-2.5 text-sm disabled:opacity-50"
+          >
+            {saving ? "Salvando..." : "Usar esta miniatura"}
+          </button>
+          <button type="button" onClick={onClose} className="btn btn-ghost py-2.5 text-sm">
+            Cancelar
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }

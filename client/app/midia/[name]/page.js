@@ -9,13 +9,20 @@ export async function generateMetadata({ params }) {
   const { name } = await params;
   const media = await getMedia(name).catch(() => null);
   if (!media) return { title: "Mídia não encontrada" };
+  const image = media.kind === "image" ? media.url : media.kind === "video" ? media.posterUrl : undefined;
   return {
     title: `${media.title} | João Augusto de Freitas`,
     description: media.description || undefined,
     openGraph: {
       title: media.title,
       description: media.description || undefined,
-      images: media.kind === "image" ? [media.url] : undefined,
+      images: image ? [image] : undefined,
+    },
+    twitter: {
+      card: image ? "summary_large_image" : "summary",
+      title: media.title,
+      description: media.description || undefined,
+      images: image ? [image] : undefined,
     },
   };
 }
@@ -37,7 +44,7 @@ export default async function MediaPage({ params }) {
             // eslint-disable-next-line @next/next/no-img-element -- servido pela API, sem otimização
             <img src={media.url} alt={media.title} className="w-full h-auto" onContextMenu={(e) => e.preventDefault()} />
           ) : media.kind === "video" ? (
-            <VideoPlayer src={media.url} title={media.title} />
+            <VideoPlayer src={media.url} poster={media.posterUrl} title={media.title} />
           ) : media.kind === "pdf" ? (
             <iframe src={media.url} title={media.title} className="w-full h-[75vh]" />
           ) : (

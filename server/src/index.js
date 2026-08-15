@@ -9,6 +9,11 @@ const coursesRouter = require("./routes/courses");
 const journeyRouter = require("./routes/journey");
 
 const app = express();
+
+// Segunda rede, pra qualquer rejeição que escape até daqui (fora do ciclo de uma
+// requisição HTTP) — loga em vez de deixar o Node derrubar o processo sozinho.
+process.on("unhandledRejection", (err) => console.error("unhandledRejection:", err));
+
 const origins = (process.env.CORS_ORIGIN || "").split(",").map((s) => s.trim()).filter(Boolean);
 
 // ponytail: qualquer porta de localhost passa. A porta do `next dev` muda sozinha
@@ -30,6 +35,14 @@ app.use("/api/files", filesRouter);
 app.use("/api/covers", coversRouter);
 app.use("/api/courses", coursesRouter);
 app.use("/api/journey", journeyRouter);
+
+// Rede de segurança: erro que escapou de um handler (asyncRoute captura a maioria,
+// mas isso cobre o resto) vira 500 pro cliente em vez de derrubar o processo.
+app.use((err, req, res, next) => {
+  console.error(err);
+  if (res.headersSent) return next(err);
+  res.status(err.status || 500).json({ error: err.message || "Erro interno" });
+});
 
 const port = process.env.PORT || 4000;
 

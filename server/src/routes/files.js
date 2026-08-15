@@ -1,12 +1,24 @@
 const express = require("express");
 const multer = require("multer");
-const supabase = require("../supabase");
+const rateLimit = require("express-rate-limit");
+const { Op } = require("sequelize");
 const Media = require("../models/Media");
 const requireAuth = require("../middleware/requireAuth");
+const { extractPoster, extractFrameAt, compressPoster } = require("../lib/poster");
+const { uploadObject, downloadObject, deleteObjects, headObject, presignPutUrl } = require("../lib/r2");
+const { ensureRoom, addUsage, removeUsage, currentUsage, CAP_BYTES } = require("../lib/storageCap");
+const asyncRoute = require("../middleware/asyncRoute");
 
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } });
-const bucket = process.env.SUPABASE_BUCKET || "uploads";
+// Só a miniatura passa pelo servidor agora (imagem pequena) — o vídeo/arquivo em
+// si vai direto do navegador pro R2 via URL assinada (ver /presign), sem passar
+// pela memória do processo. É o que permite arquivo grande sem derrubar o Render.
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+
+// GETs (raw/:name, raw/:name/poster, meta/:name) são públicos de propósito — o
+// site inteiro depende deles pra mostrar imagem/vídeo. Sem auth, então sem esse
+// limite qualquer script podia martelar e comer a cota de leitura (Class B) do R2.
+const publicReadLimit = rateLimit({ windowMs: 15 * 60 * 1000, limit: 600, standardHeaders: true, legacyHeaders: false });
 
 function kindOf(mimetype) {
   if (mimetype.startsWith("image/")) return "image";
@@ -15,9 +27,18 @@ function kindOf(mimetype) {
   return "other";
 }
 
-// O link do Supabase nunca sai daqui. O front recebe dois caminhos no domínio do site:
-// a página (/midia/<nome>) e o arquivo cru (/midia/<nome>/arquivo, reescrito pro Next).
-const pagePath = (name) => `/midia/${encodeURIComponent(name)}`;
+// O nome guardado no banco é "slug.ext" (a chave real no R2). O link
+// compartilhado, porém, não mostra a extensão — só o slug.
+function stripExt(name) {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(0, dot) : name;
+}
+
+const posterKey = (name) => `${name}.poster.jpg`;
+
+// O link do R2 nunca sai daqui. O front recebe dois caminhos no domínio do site:
+// a página (/midia/<slug>) e o arquivo cru (/midia/<slug>/arquivo, reescrito pro Next).
+const pagePath = (name) => `/midia/${encodeURIComponent(stripExt(name))}`;
 const rawPath = (name) => `${pagePath(name)}/arquivo`;
 
 // "Sidera Predict.WEBP" -> "sidera-predict.webp"
@@ -35,6 +56,12 @@ function slugify(name) {
   return ext ? `${slug}.${ext}` : slug;
 }
 
+// URLs públicas só carregam o slug (sem extensão); o nome real ("slug.ext",
+// a chave no R2) mora só no banco. Resolve um a partir do outro aqui.
+function findBySlug(slug) {
+  return Media.findOne({ where: { [Op.or]: [{ name: slug }, { name: { [Op.like]: `${slug}.%` } }] } });
+}
+
 const present = (m) => ({
   name: m.name,
   title: m.title,
@@ -45,19 +72,28 @@ const present = (m) => ({
   createdAt: m.createdAt,
   url: rawPath(m.name),
   pageUrl: pagePath(m.name),
+  // ?v= muda sempre que a miniatura é trocada — sem isso o cache "immutable"
+  // da rota de poster (1 ano) segurava a imagem antiga depois de escolher outra.
+  posterUrl: m.kind === "video" ? `${rawPath(m.name)}/poster?v=${new Date(m.updatedAt).getTime()}` : undefined,
 });
 
-router.get("/", requireAuth, async (req, res) => {
+router.get("/", requireAuth, asyncRoute(async (req, res) => {
   const files = await Media.findAll({ order: [["createdAt", "DESC"]] });
   res.json(files.map(present));
-});
+}));
 
-// Público: alimenta a página /midia/<nome> do site.
-router.get("/meta/:name", async (req, res) => {
-  const media = await Media.findOne({ where: { name: req.params.name } });
+// Uso atual do R2 vs o teto que o app se impõe — pro admin ver de longe antes de
+// chegar perto do limite, não só descobrir quando um upload já foi recusado.
+router.get("/usage", requireAuth, asyncRoute(async (req, res) => {
+  res.json({ bytesUsed: await currentUsage(), capBytes: CAP_BYTES });
+}));
+
+// Público: alimenta a página /midia/<slug> do site.
+router.get("/meta/:name", publicReadLimit, asyncRoute(async (req, res) => {
+  const media = await findBySlug(req.params.name);
   if (!media) return res.status(404).json({ error: "Arquivo não encontrado" });
   res.json(present(media));
-});
+}));
 
 // SVG e HTML rodam script quando abertos direto no navegador — "Arquivos" aceita
 // qualquer tipo de propósito (kind "outros"), então em vez de bloquear o upload,
@@ -66,63 +102,164 @@ const executableInBrowser = /^(text\/html|application\/xhtml\+xml|image\/svg\+xm
 
 // Público de propósito: é o que as <img>/<video> do site usam. Sem auth porque
 // header não vai em src="", e o conteúdo é material público do portfólio.
-router.get("/raw/:name", async (req, res) => {
-  const { data, error } = await supabase.storage.from(bucket).download(req.params.name);
-  if (error) return res.status(404).json({ error: "Arquivo não encontrado" });
+router.get("/raw/:name", publicReadLimit, asyncRoute(async (req, res) => {
+  const media = await findBySlug(req.params.name);
+  if (!media) return res.status(404).json({ error: "Arquivo não encontrado" });
 
-  const type = data.type || "application/octet-stream";
+  const obj = await downloadObject(media.name);
+  if (!obj) return res.status(404).json({ error: "Arquivo não encontrado" });
+
+  const type = obj.contentType || media.mimetype || "application/octet-stream";
   res.set("Content-Type", type);
   res.set("X-Content-Type-Options", "nosniff");
   if (executableInBrowser.test(type)) res.set("Content-Disposition", "attachment");
   res.set("Cache-Control", "public, max-age=31536000, immutable");
-  res.send(Buffer.from(await data.arrayBuffer()));
-});
+  res.send(obj.buffer);
+}));
 
-router.post("/", requireAuth, upload.single("file"), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "Nenhum arquivo enviado" });
+// Frame extraído do vídeo no upload (ver lib/poster). Usado como og:image do
+// link compartilhado e como poster do <video> enquanto ele carrega.
+router.get("/raw/:name/poster", publicReadLimit, asyncRoute(async (req, res) => {
+  const media = await findBySlug(req.params.name);
+  if (!media || media.kind !== "video") return res.status(404).json({ error: "Sem miniatura" });
 
-  // Nome escolhido no upload; sem ele, o nome original. Sempre com a extensão do arquivo.
-  const ext = req.file.originalname.split(".").pop();
-  const name = slugify(req.body.name ? `${req.body.name}.${ext}` : req.file.originalname);
+  const obj = await downloadObject(posterKey(media.name));
+  if (!obj) return res.status(404).json({ error: "Sem miniatura" });
+
+  res.set("Content-Type", "image/jpeg");
+  res.set("Cache-Control", "public, max-age=31536000, immutable");
+  res.send(obj.buffer);
+}));
+
+// 1) Pede uma URL assinada de PUT — o navegador sobe os bytes direto pro R2 a
+// partir daqui, sem passar pelo servidor. Ainda não cria o registro em Media.
+router.post("/presign", requireAuth, asyncRoute(async (req, res) => {
+  const { filename, mimetype, size, name: customName } = req.body;
+  if (!filename || !mimetype || !size) {
+    return res.status(400).json({ error: "filename, mimetype e size são obrigatórios" });
+  }
+
+  const ext = filename.split(".").pop();
+  const name = slugify(customName ? `${customName}.${ext}` : filename);
 
   if (await Media.findOne({ where: { name } }))
     return res.status(409).json({ error: `Já existe um arquivo chamado "${name}"` });
 
-  const { error } = await supabase.storage.from(bucket).upload(name, req.file.buffer, {
-    contentType: req.file.mimetype,
-    upsert: false,
-  });
-  if (error) {
-    const taken = /exists|duplicate/i.test(error.message);
-    return res
-      .status(taken ? 409 : 500)
-      .json({ error: taken ? `Já existe um arquivo chamado "${name}"` : error.message });
+  try {
+    await ensureRoom(Number(size));
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message });
   }
+
+  const uploadUrl = await presignPutUrl(name, mimetype);
+  res.json({ name, uploadUrl });
+}));
+
+// 2) O navegador chama isso depois que o PUT direto pro R2 terminou: confirma
+// que o objeto existe de fato (nunca confia só no que o cliente diz), cria o
+// registro e — se for vídeo — baixa de volta só pra extrair o frame de capa.
+router.post("/complete", requireAuth, asyncRoute(async (req, res) => {
+  const { name, title, description } = req.body;
+  if (!name) return res.status(400).json({ error: "name é obrigatório" });
+
+  const head = await headObject(name);
+  if (!head) return res.status(404).json({ error: "Upload não encontrado — tente enviar de novo" });
+
+  if (await Media.findOne({ where: { name } }))
+    return res.status(409).json({ error: `Já existe um arquivo chamado "${name}"` });
+
+  const mimetype = head.ContentType || "application/octet-stream";
+  const kind = kindOf(mimetype);
+  const size = head.ContentLength || 0;
 
   const media = await Media.create({
     name,
-    title: req.body.title || req.file.originalname,
-    description: req.body.description || "",
-    kind: kindOf(req.file.mimetype),
-    mimetype: req.file.mimetype,
-    size: req.file.size,
+    title: title || name,
+    description: description || "",
+    kind,
+    mimetype,
+    size,
   });
+  await addUsage(size);
+
+  // Melhor-esforço: se a extração do frame falhar (codec exótico, ffmpeg
+  // ausente, etc.), o upload do vídeo já foi concluído e não deve quebrar por isso.
+  if (kind === "video") {
+    try {
+      const obj = await downloadObject(name);
+      if (obj) {
+        const poster = await extractPoster(obj.buffer);
+        if (poster) {
+          await uploadObject(posterKey(name), poster, "image/jpeg");
+          await addUsage(poster.length);
+        }
+      }
+    } catch (err) {
+      console.error(`Falha ao gerar poster para "${name}":`, err.message);
+    }
+  }
+
   res.status(201).json(present(media));
-});
+}));
+
+// Miniatura escolhida à mão: ou uma imagem enviada direto, ou um instante do
+// próprio vídeo já armazenado (o admin manda o frame recortado no browser via
+// canvas — ver FilesAdmin — então aqui é sempre "file", nunca atSeconds; o
+// atSeconds fica como caminho alternativo caso o recorte no browser falhe).
+router.post("/:name/poster", requireAuth, upload.single("file"), asyncRoute(async (req, res) => {
+  const media = await Media.findOne({ where: { name: req.params.name } });
+  if (!media) return res.status(404).json({ error: "Arquivo não encontrado" });
+  if (media.kind !== "video") return res.status(400).json({ error: "Só vídeos têm miniatura" });
+
+  try {
+    let poster;
+    if (req.file) {
+      poster = await compressPoster(req.file.buffer);
+    } else if (req.body.atSeconds) {
+      const obj = await downloadObject(media.name);
+      if (!obj) return res.status(404).json({ error: "Arquivo não encontrado" });
+      poster = await extractFrameAt(obj.buffer, Number(req.body.atSeconds));
+    } else {
+      return res.status(400).json({ error: "Envie uma imagem ou um instante do vídeo" });
+    }
+
+    await ensureRoom(poster.length);
+    // Antes de gravar por cima, desconta o que a miniatura anterior ocupava —
+    // senão cada troca de miniatura só soma, nunca substitui, no contador.
+    const previous = await downloadObject(posterKey(media.name));
+    if (previous) await removeUsage(previous.buffer.length);
+
+    await uploadObject(posterKey(media.name), poster, "image/jpeg");
+    await addUsage(poster.length);
+
+    // Carimba updatedAt à força: é o que muda a versão da URL (?v=) — um update
+    // sem mudança de verdade o Sequelize pode simplesmente pular.
+    await media.update({ updatedAt: new Date() });
+    res.json(present(media));
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || "Falha ao gerar a miniatura" });
+  }
+}));
 
 // Edita só título/descrição — trocar o arquivo é excluir e subir de novo.
-router.put("/:name", requireAuth, async (req, res) => {
+router.put("/:name", requireAuth, asyncRoute(async (req, res) => {
   const media = await Media.findOne({ where: { name: req.params.name } });
   if (!media) return res.status(404).json({ error: "Arquivo não encontrado" });
   await media.update({ title: req.body.title, description: req.body.description });
   res.json(present(media));
-});
+}));
 
-router.delete("/:name", requireAuth, async (req, res) => {
-  const { error } = await supabase.storage.from(bucket).remove([req.params.name]);
-  if (error) return res.status(500).json({ error: error.message });
-  await Media.destroy({ where: { name: req.params.name } });
+router.delete("/:name", requireAuth, asyncRoute(async (req, res) => {
+  const media = await Media.findOne({ where: { name: req.params.name } });
+  if (!media) return res.status(404).json({ error: "Arquivo não encontrado" });
+
+  const posterObj = media.kind === "video" ? await downloadObject(posterKey(media.name)) : null;
+  await deleteObjects([media.name, posterKey(media.name)]);
+  await removeUsage(media.size || 0);
+  if (posterObj) await removeUsage(posterObj.buffer.length);
+
+  await media.destroy();
   res.status(204).end();
-});
+}));
 
 module.exports = router;

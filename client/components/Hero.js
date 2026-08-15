@@ -83,6 +83,8 @@ export default function Hero() {
             fill
             sizes="150px"
             priority
+            placeholder="blur"
+            blurDataURL="data:image/jpeg;base64,/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAKAAoDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAABAIH/8QAJhAAAgECBQIHAAAAAAAAAAAAAQIDBAUABhESMSFBExQVIiNRkf/EABUBAQEAAAAAAAAAAAAAAAAAAAEF/8QAGxEAAgMAAwAAAAAAAAAAAAAAAQIAAxEEE+H/2gAMAwEAAhEDEQA/AGZgskcNxpfM3AR0MSGSaKnIVoE7kjroT2PQYv0uyTfJHaM1yI/uV0ChWB4IG7jGEZuqZ3zdd908reJcKhX1cncBIdAfsDQfmB093uUdPEkdwrERVAVVnYAADgDXEe/j2CpG7DuexZgcwT//2Q=="
             className="relative rounded-full border-4 border-background object-cover"
           />
         </div>
