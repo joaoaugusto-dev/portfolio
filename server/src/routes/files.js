@@ -5,7 +5,7 @@ const { Op } = require("sequelize");
 const Media = require("../models/Media");
 const requireAuth = require("../middleware/requireAuth");
 const { extractPoster, extractFrameAt, compressPoster } = require("../lib/poster");
-const { uploadObject, downloadObject, deleteObjects, headObject, presignPutUrl } = require("../lib/r2");
+const { uploadObject, downloadObject, streamObject, deleteObjects, headObject, presignPutUrl } = require("../lib/r2");
 const { ensureRoom, addUsage, removeUsage, currentUsage, CAP_BYTES } = require("../lib/storageCap");
 const asyncRoute = require("../middleware/asyncRoute");
 
@@ -102,19 +102,32 @@ const executableInBrowser = /^(text\/html|application\/xhtml\+xml|image\/svg\+xm
 
 // Público de propósito: é o que as <img>/<video> do site usam. Sem auth porque
 // header não vai em src="", e o conteúdo é material público do portfólio.
+// Repassa o Range do navegador pro R2 e dá pipe direto na resposta (sem
+// bufferizar) — essencial pra <video>: sem isso, tocar, arrastar a barra ou
+// escolher frame baixava o arquivo inteiro do zero a cada vez.
 router.get("/raw/:name", publicReadLimit, asyncRoute(async (req, res) => {
   const media = await findBySlug(req.params.name);
   if (!media) return res.status(404).json({ error: "Arquivo não encontrado" });
 
-  const obj = await downloadObject(media.name);
+  const range = req.headers.range;
+  const obj = await streamObject(media.name, range);
   if (!obj) return res.status(404).json({ error: "Arquivo não encontrado" });
 
   const type = obj.contentType || media.mimetype || "application/octet-stream";
   res.set("Content-Type", type);
   res.set("X-Content-Type-Options", "nosniff");
+  res.set("Accept-Ranges", "bytes");
+  if (obj.contentLength != null) res.set("Content-Length", obj.contentLength);
   if (executableInBrowser.test(type)) res.set("Content-Disposition", "attachment");
   res.set("Cache-Control", "public, max-age=31536000, immutable");
-  res.send(obj.buffer);
+  if (range && obj.contentRange) {
+    res.status(206);
+    res.set("Content-Range", obj.contentRange);
+  }
+  // Cliente cancelou (seek novo, fechou a aba)? Corta o download do R2 junto —
+  // é exatamente esse corte que faltava com o buffer inteiro em memória.
+  req.on("close", () => obj.stream.destroy());
+  obj.stream.pipe(res);
 }));
 
 // Frame extraído do vídeo no upload (ver lib/poster). Usado como og:image do

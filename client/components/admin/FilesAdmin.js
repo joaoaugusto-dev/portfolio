@@ -506,71 +506,37 @@ const fmtTime = (s) => {
 // atual é recortado no browser via canvas — nada de vídeo sobe de novo pro
 // servidor), ou envia uma imagem pronta. Os dois caminhos terminam comprimidos
 // no servidor (setPoster -> sharp), então o que sobe daqui pode vir cru.
-// Espera o vídeo terminar de buscar um instante — seek em <video> é assíncrono
-// (decodifica até o keyframe mais próximo e vem andando), por isso não dá pra
-// só setar currentTime e ler na sequência.
-function seekTo(video, t) {
-  return new Promise((resolve) => {
-    const onSeeked = () => {
-      video.removeEventListener("seeked", onSeeked);
-      resolve();
-    };
-    video.addEventListener("seeked", onSeeked);
-    video.currentTime = t;
-  });
-}
-
-// Pré-renderiza uma tira de miniaturas em baixa resolução ANTES de liberar o
-// scrub: arrastar a régua sobre o <video> ao vivo trava (cada tick é um seek
-// real, que decodifica desde o keyframe anterior). Arrastando sobre esse
-// array, é só trocar qual <img> aparece — instantâneo.
-async function buildStrip(video, duration, onProgress) {
-  const count = Math.max(8, Math.min(60, Math.round(duration * 2)));
-  const times = Array.from({ length: count }, (_, i) => (duration * i) / Math.max(1, count - 1));
-  const w = 160;
-  const h = Math.round(w * ((video.videoHeight || 9) / (video.videoWidth || 16))) || 90;
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  const frames = [];
-  for (let i = 0; i < times.length; i++) {
-    await seekTo(video, times[i]);
-    ctx.drawImage(video, 0, 0, w, h);
-    frames.push(canvas.toDataURL("image/jpeg", 0.55));
-    onProgress((i + 1) / times.length);
-  }
-  return { frames, times };
-}
-
+//
+// O <video> aqui é sempre o real (não uma tira pré-renderizada em baixa
+// resolução): a rota /raw/:name do servidor agora respeita Range, então o
+// navegador só busca os pedaços do arquivo que precisa pra cada seek, em vez
+// de baixar o vídeo inteiro de novo a cada arraste — arrastar sem travar não
+// depende mais de pré-processar nada.
 function PosterPicker({ file, token, onClose, onSaved, notify }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const objectUrlRef = useRef(null);
+  const seekTimer = useRef(null);
   const [ready, setReady] = useState(false);
   const [duration, setDuration] = useState(0);
-  const [strip, setStrip] = useState(null); // { frames, times }
-  const [prepPct, setPrepPct] = useState(0);
-  const [index, setIndex] = useState(0);
+  const [time, setTime] = useState(0);
   const [mode, setMode] = useState("frame"); // "frame" | "upload"
   const [uploadFile, setUploadFile] = useState(null);
   const [uploadPreview, setUploadPreview] = useState("");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (!ready || strip) return;
-    let cancelled = false;
-    buildStrip(videoRef.current, duration, (pct) => !cancelled && setPrepPct(pct)).then((s) => {
-      if (!cancelled) {
-        setStrip(s);
-        setIndex(Math.min(1, s.frames.length - 1)); // não o 1º: costuma vir preto/em transição
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- só depende de ready virar true uma vez
-  }, [ready]);
+  // O texto do tempo acompanha o arraste na hora; o seek de verdade no vídeo
+  // (que baixa bytes novos do servidor) espera o dedo parar por um instante —
+  // sem isso, cada pixel arrastado vira uma requisição de Range.
+  function scrub(t) {
+    setTime(t);
+    clearTimeout(seekTimer.current);
+    seekTimer.current = setTimeout(() => {
+      if (videoRef.current) videoRef.current.currentTime = t;
+    }, 120);
+  }
+
+  useEffect(() => () => clearTimeout(seekTimer.current), []);
 
   function pickUpload(f) {
     if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
@@ -596,9 +562,21 @@ function PosterPicker({ file, token, onClose, onSaved, notify }) {
         image = uploadFile;
       } else {
         const v = videoRef.current;
+        // O seek real é debounced (scrub()) — se salvar antes dele disparar, o
+        // vídeo ainda pode estar num instante anterior ao mostrado no texto.
+        // Garante que bate certinho antes de capturar.
+        clearTimeout(seekTimer.current);
+        if (Math.abs(v.currentTime - time) > 0.05) {
+          await new Promise((resolve) => {
+            const onSeeked = () => {
+              v.removeEventListener("seeked", onSeeked);
+              resolve();
+            };
+            v.addEventListener("seeked", onSeeked);
+            v.currentTime = time;
+          });
+        }
         const canvas = canvasRef.current;
-        // Recorte final em resolução cheia: a tira de scrub é só pré-visualização.
-        await seekTo(v, strip.times[index]);
         canvas.width = v.videoWidth;
         canvas.height = v.videoHeight;
         canvas.getContext("2d").drawImage(v, 0, 0);
@@ -664,42 +642,36 @@ function PosterPicker({ file, token, onClose, onSaved, notify }) {
         {mode === "frame" ? (
           <div className="space-y-2">
             <div className="relative aspect-video overflow-hidden rounded-xl bg-black">
-              {/* O <video> real só serve pra gerar a tira e pro recorte final em alta
-                  resolução — quem aparece na tela durante o arraste é sempre a tira. */}
               <video
                 ref={videoRef}
                 src={file.url}
                 muted
                 playsInline
-                preload="auto"
-                className="absolute inset-0 h-full w-full opacity-0"
+                preload="metadata"
+                className="absolute inset-0 h-full w-full object-contain"
                 onLoadedMetadata={(e) => {
                   setDuration(e.currentTarget.duration);
                   setReady(true);
                 }}
               />
-              {strip ? (
-                // eslint-disable-next-line @next/next/no-img-element -- data URL local, sem otimização
-                <img src={strip.frames[index]} alt="" className="absolute inset-0 h-full w-full object-contain" />
-              ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-xs text-muted">
+              {!ready && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/60">
                   <i className="fa-solid fa-circle-notch fa-spin text-lg text-accent-2" aria-hidden />
-                  <span>Preparando pré-visualização... {Math.round(prepPct * 100)}%</span>
                 </div>
               )}
             </div>
             <input
               type="range"
               min="0"
-              max={strip ? strip.frames.length - 1 : 0}
-              step="1"
-              value={index}
-              disabled={!strip}
-              onChange={(e) => setIndex(Number(e.target.value))}
+              max={duration || 0}
+              step="0.05"
+              value={time}
+              disabled={!ready}
+              onChange={(e) => scrub(Number(e.target.value))}
               className="w-full accent-[var(--accent-2)]"
             />
             <p className="text-center text-xs tabular-nums text-muted">
-              {fmtTime(strip ? strip.times[index] : 0)} / {fmtTime(duration)}
+              {fmtTime(time)} / {fmtTime(duration)}
             </p>
             <canvas ref={canvasRef} hidden />
           </div>
@@ -723,7 +695,7 @@ function PosterPicker({ file, token, onClose, onSaved, notify }) {
           <button
             type="button"
             onClick={save}
-            disabled={saving || (mode === "frame" ? !strip : !uploadFile)}
+            disabled={saving || (mode === "frame" ? !ready : !uploadFile)}
             className="btn btn-primary sheen py-2.5 text-sm disabled:opacity-50"
           >
             {saving ? "Salvando..." : "Usar esta miniatura"}

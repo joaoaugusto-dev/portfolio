@@ -32,10 +32,39 @@ async function uploadObject(key, body, contentType) {
 }
 
 // null quando o objeto não existe — quem chama trata como 404, não como erro.
-async function downloadObject(key) {
+// `range` (ex.: "bytes=0-1023") pede só um pedaço — sem isso, TODO seek num
+// <video> (tocar, arrastar a barra, escolher frame) baixava o arquivo inteiro
+// de novo a cada vez, tanto do R2 quanto do navegador pro servidor.
+async function downloadObject(key, range) {
   try {
-    const res = await r2.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-    return { buffer: await streamToBuffer(res.Body), contentType: res.ContentType };
+    const res = await r2.send(new GetObjectCommand({ Bucket: bucket, Key: key, ...(range ? { Range: range } : {}) }));
+    return {
+      buffer: await streamToBuffer(res.Body),
+      contentType: res.ContentType,
+      contentLength: res.ContentLength,
+      contentRange: res.ContentRange,
+    };
+  } catch (err) {
+    if (err.name === "NoSuchKey" || err.$metadata?.httpStatusCode === 404) return null;
+    throw err;
+  }
+}
+
+// Pro /raw de vídeo/arquivo: NÃO baixa tudo pra memória antes de responder — só
+// devolve o stream, pra dar pipe direto na resposta HTTP. Isso importa porque o
+// navegador pede ranges "abertos" tipo bytes=0-fim-do-arquivo (comum ao carregar
+// um <video>) e cancela na hora que você arrasta a barra pra outro ponto; com
+// buffer, o servidor já tinha baixado o resto inteiro do R2 antes de descartar —
+// com stream, o cancelamento do lado do cliente corta o download do R2 também.
+async function streamObject(key, range) {
+  try {
+    const res = await r2.send(new GetObjectCommand({ Bucket: bucket, Key: key, ...(range ? { Range: range } : {}) }));
+    return {
+      stream: res.Body,
+      contentType: res.ContentType,
+      contentLength: res.ContentLength,
+      contentRange: res.ContentRange,
+    };
   } catch (err) {
     if (err.name === "NoSuchKey" || err.$metadata?.httpStatusCode === 404) return null;
     throw err;
@@ -64,4 +93,4 @@ function presignPutUrl(key, contentType, expiresIn = 900) {
   return getSignedUrl(r2, cmd, { expiresIn });
 }
 
-module.exports = { uploadObject, downloadObject, deleteObjects, headObject, presignPutUrl };
+module.exports = { uploadObject, downloadObject, streamObject, deleteObjects, headObject, presignPutUrl };
