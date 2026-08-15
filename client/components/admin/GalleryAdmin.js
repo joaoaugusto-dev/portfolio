@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getGallery, api } from "@/lib/api";
 import { revalidateHome } from "@/lib/actions";
-import useDragReorder from "@/lib/useDragReorder";
+import { sortGalleryByDate } from "@/lib/gallerySort";
 import { Spot, Toast, useToast } from "@/components/Fx";
 import ImageCropUpload from "@/components/admin/ImageCropUpload";
 
@@ -20,7 +20,6 @@ export default function GalleryAdmin({ token }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, notify] = useToast();
-  const { dragging, start, move, end } = useDragReorder(setItems, saveOrder);
 
   async function refresh() {
     setLoading(true);
@@ -31,17 +30,6 @@ export default function GalleryAdmin({ token }) {
       setError(`Não consegui carregar a galeria: ${err.message}`);
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function saveOrder() {
-    try {
-      setItems(await api.reorderGalleryItems(token, items.map((it) => it.id)));
-      notify("Ordem salva");
-      revalidateHome().catch(() => notify("Salvo, mas não consegui atualizar a home — atualize a página do admin e tente de novo.", "error"));
-    } catch (err) {
-      setError(err.message);
-      refresh();
     }
   }
 
@@ -71,7 +59,7 @@ export default function GalleryAdmin({ token }) {
     setSaving(true);
     try {
       if (editingId) await api.updateGalleryItem(token, editingId, form);
-      else await api.createGalleryItem(token, { ...form, order: items.length });
+      else await api.createGalleryItem(token, form);
       notify(editingId ? "Foto atualizada" : "Foto adicionada");
       resetForm();
       refresh();
@@ -96,6 +84,8 @@ export default function GalleryAdmin({ token }) {
     }
     refresh();
   }
+
+  const sorted = sortGalleryByDate(items);
 
   return (
     <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
@@ -185,38 +175,24 @@ export default function GalleryAdmin({ token }) {
           Galeria <span className="text-muted">({items.length})</span>
         </h2>
         <p className="-mt-1 text-xs text-muted">
-          Arraste pelo <i className="fa-solid fa-grip-vertical" aria-hidden /> para mudar a posição na
-          seção do site. Fotos consecutivas com o mesmo evento viram uma seção com título na home.
+          Ordem automática pela data do evento (mais recente primeiro); fotos sem evento ficam soltas
+          no fim. Fotos com o mesmo evento e data viram uma seção com título na home.
         </p>
 
         {loading &&
           [0, 1].map((i) => <div key={i} className="h-[4.5rem] animate-pulse rounded-xl bg-surface/70" />)}
 
         <AnimatePresence initial={false}>
-          {items.map((it, i) => (
+          {sorted.map((it) => (
             <motion.div
               key={it.id}
-              layout={dragging === null}
+              layout
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97 }}
               transition={{ type: "spring", stiffness: 400, damping: 36 }}
-              data-drag-index={i}
-              className={`flex items-center gap-3 rounded-xl border bg-surface p-2.5 transition-colors ${
-                dragging === i ? "border-accent shadow-lg shadow-accent/20" : "border-white/5"
-              }`}
+              className="flex items-center gap-3 rounded-xl border border-white/5 bg-surface p-2.5"
             >
-              <span
-                onPointerDown={(e) => start(e, i)}
-                onPointerMove={move}
-                onPointerUp={end}
-                onPointerCancel={end}
-                title="Arraste para reordenar"
-                className="touch-none cursor-grab px-1 text-muted transition-colors hover:text-accent-2 active:cursor-grabbing"
-              >
-                <i className="fa-solid fa-grip-vertical" aria-hidden />
-              </span>
-
               {it.image ? (
                 // eslint-disable-next-line @next/next/no-img-element -- miniatura da API, sem otimização
                 <img src={it.image} alt="" className="h-11 w-16 shrink-0 rounded-lg object-cover" />
@@ -228,9 +204,7 @@ export default function GalleryAdmin({ token }) {
 
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{it.eventName || "Sem evento"}</p>
-                <p className="text-xs text-muted">
-                  {it.eventDate?.slice(0, 10) || "sem data"} · posição {i + 1}
-                </p>
+                <p className="text-xs text-muted">{it.eventDate?.slice(0, 10) || "sem data"}</p>
               </div>
 
               <div className="flex shrink-0 gap-1.5">

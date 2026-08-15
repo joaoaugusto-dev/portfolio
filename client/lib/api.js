@@ -87,8 +87,6 @@ export const api = {
     authedFetch(`/api/gallery/${id}`, token, { method: "PUT", body: JSON.stringify(data) }),
   deleteGalleryItem: (token, id) =>
     authedFetch(`/api/gallery/${id}`, token, { method: "DELETE" }),
-  reorderGalleryItems: (token, ids) =>
-    authedFetch("/api/gallery/reorder", token, { method: "PUT", body: JSON.stringify({ ids }) }),
   uploadCover: (token, file) => {
     const form = new FormData();
     form.append("file", file);

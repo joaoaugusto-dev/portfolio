@@ -4,10 +4,12 @@ import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import Reveal from "./Reveal";
 import { T, useLang } from "./I18n";
+import { sortGalleryByDate } from "@/lib/gallerySort";
 
-// Agrupa por corridas consecutivas do mesmo evento (nome + data) — preserva a
-// ordem manual do admin em vez de reordenar por data. Fotos sem evento (o
-// padrão antes dessa feature) caem numa "seção" sem título, iguais a antes.
+// Agrupa por corridas consecutivas do mesmo evento (nome + data) — o array já
+// chega ordenado por data (mais recente primeiro), então itens do mesmo
+// evento sempre ficam adjacentes. Fotos sem evento caem numa "seção" sem
+// título, iguais a antes dessa feature.
 function groupByEvent(items) {
   const groups = [];
   for (const it of items) {
@@ -77,7 +79,7 @@ export default function Gallery({ items = [] }) {
 
   if (!items.length) return null;
 
-  const groups = groupByEvent(items);
+  const groups = groupByEvent(sortGalleryByDate(items));
 
   return (
     <section id="galeria" className="scroll-mt-2 px-6 py-24">
