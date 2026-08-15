@@ -1,8 +1,9 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getCourses, api } from "@/lib/api";
 import { revalidateHome } from "@/lib/actions";
+import useDragReorder from "@/lib/useDragReorder";
 import { Spot, Toast, useToast } from "@/components/Fx";
 import CoverUpload from "@/components/admin/CoverUpload";
 
@@ -27,9 +28,8 @@ export default function CoursesAdmin({ token }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const dragFrom = useRef(null);
-  const [dragging, setDragging] = useState(null);
   const [toast, notify] = useToast();
+  const { dragging, start, move, end } = useDragReorder(setCourses, saveOrder);
 
   async function refresh() {
     setLoading(true);
@@ -43,25 +43,11 @@ export default function CoursesAdmin({ token }) {
     }
   }
 
-  function onDragEnter(to) {
-    const from = dragFrom.current;
-    if (from === null || from === to) return;
-    setCourses((list) => {
-      const next = [...list];
-      next.splice(to, 0, ...next.splice(from, 1));
-      return next;
-    });
-    dragFrom.current = to;
-    setDragging(to);
-  }
-
   async function saveOrder() {
-    dragFrom.current = null;
-    setDragging(null);
     try {
       setCourses(await api.reorderCourses(token, courses.map((c) => c.id)));
       notify("Ordem salva");
-      revalidateHome();
+      revalidateHome().catch(() => notify("Salvo, mas não consegui atualizar a home — atualize a página do admin e tente de novo.", "error"));
     } catch (err) {
       setError(err.message);
       refresh();
@@ -94,7 +80,7 @@ export default function CoursesAdmin({ token }) {
       notify(editingId ? "Curso atualizado" : "Curso adicionado");
       resetForm();
       refresh();
-      revalidateHome();
+      revalidateHome().catch(() => notify("Salvo, mas não consegui atualizar a home — atualize a página do admin e tente de novo.", "error"));
     } catch (err) {
       setError(err.message);
       notify(err.message, "error");
@@ -108,7 +94,7 @@ export default function CoursesAdmin({ token }) {
     try {
       await api.deleteCourse(token, id);
       notify("Curso excluído");
-      revalidateHome();
+      revalidateHome().catch(() => notify("Salvo, mas não consegui atualizar a home — atualize a página do admin e tente de novo.", "error"));
     } catch (err) {
       setError(err.message);
       notify(err.message, "error");
@@ -243,22 +229,18 @@ export default function CoursesAdmin({ token }) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97 }}
               transition={{ type: "spring", stiffness: 400, damping: 36 }}
-              onDragOver={(e) => e.preventDefault()}
-              onDragEnter={() => onDragEnter(i)}
+              data-drag-index={i}
               className={`flex items-center gap-3 rounded-xl border bg-surface p-2.5 transition-colors ${
                 dragging === i ? "border-accent shadow-lg shadow-accent/20" : "border-white/5"
               }`}
             >
               <span
-                draggable
-                onDragStart={(e) => {
-                  dragFrom.current = i;
-                  setDragging(i);
-                  e.dataTransfer.setDragImage(e.currentTarget.parentElement, 20, 20);
-                }}
-                onDragEnd={saveOrder}
+                onPointerDown={(e) => start(e, i)}
+                onPointerMove={move}
+                onPointerUp={end}
+                onPointerCancel={end}
                 title="Arraste para reordenar"
-                className="cursor-grab px-1 text-muted transition-colors hover:text-accent-2 active:cursor-grabbing"
+                className="touch-none cursor-grab px-1 text-muted transition-colors hover:text-accent-2 active:cursor-grabbing"
               >
                 <i className="fa-solid fa-grip-vertical" aria-hidden />
               </span>

@@ -148,7 +148,7 @@ export default function FilesAdmin({ token }) {
       setForm({ name: "", title: "", description: "" });
       await refresh();
       notify(list.length === 1 ? "Arquivo enviado" : `${list.length} arquivos enviados`);
-      revalidateHome();
+      revalidateHome().catch(() => notify("Salvo, mas não consegui atualizar a home — atualize a página do admin e tente de novo.", "error"));
     } catch (err) {
       setError(err.message);
       notify(err.message, "error");
@@ -162,7 +162,7 @@ export default function FilesAdmin({ token }) {
     try {
       await api.deleteFile(token, name);
       notify("Arquivo excluído");
-      revalidateHome();
+      revalidateHome().catch(() => notify("Salvo, mas não consegui atualizar a home — atualize a página do admin e tente de novo.", "error"));
     } catch (err) {
       setError(err.message);
       notify(err.message, "error");
@@ -187,7 +187,7 @@ export default function FilesAdmin({ token }) {
       setEditing(null);
       notify("Alterações salvas");
       refresh();
-      revalidateHome();
+      revalidateHome().catch(() => notify("Salvo, mas não consegui atualizar a home — atualize a página do admin e tente de novo.", "error"));
     } catch (err) {
       setError(err.message);
       notify(err.message, "error");
