@@ -1,15 +1,10 @@
 -- Rode isso no Supabase: Project > SQL Editor > New query > Run.
 -- Cria a tabela de projetos com as mesmas colunas que o Sequelize (server/src/models/Project.js) espera,
--- já insere os 11 projetos originais do portfólio, e cria os buckets públicos "uploads" (Arquivos)
--- e "covers" (capas de curso/projeto, geradas em webp por server/src/routes/covers.js).
-
-insert into storage.buckets (id, name, public)
-values ('uploads', 'uploads', true)
-on conflict (id) do nothing;
-
-insert into storage.buckets (id, name, public)
-values ('covers', 'covers', true)
-on conflict (id) do nothing;
+-- e já insere os 11 projetos originais do portfólio.
+--
+-- Armazenamento (arquivos de mídia e capas) não fica no Supabase — vai pro Cloudflare R2,
+-- configurado só por variáveis de ambiente (ver server/.env.example e o README). Não precisa
+-- de bucket nem de SQL nenhum pra isso.
 
 create table if not exists "Projects" (
   "id" serial primary key,
