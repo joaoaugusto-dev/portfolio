@@ -1,0 +1,397 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0e0b16;
+  --surface: #17131f;
+  --surface-2: #1f1930;
+  --foreground: #f3f0f9;
+  --muted: #a99bc2;
+  --accent: #9b59b6;
+  --accent-2: #c79be0;
+  --accent-dim: #2c2c54;
+  --accent-deep: #6c3483;
+
+  /* Posição do ponteiro em % da viewport. Escrita uma vez por frame pelo <Fx/>,
+     lida por vários gradientes — nenhum componente re-renderiza por isso. */
+  --mx: 50%;
+  --my: 25%;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-accent-dim: var(--accent-dim);
+  --color-accent-deep: var(--accent-deep);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html {
+  /* Tudo em rem escala junto. No celular desce um pouco pra caber mais conteúdo. */
+  font-size: clamp(16px, 4vw, 17.5px);
+  scroll-behavior: smooth;
+  /* Compensar a nav é trabalho do scroll-mt-* de cada seção (Hero.js etc.) — um valor aqui
+     também vira "piso" do offset e ganha do scroll-mt menor, prendendo o salto longe demais. */
+  scrollbar-color: var(--accent) var(--surface);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  overflow-x: clip;
+  /* Sem isso, texto é selecionável e o navegador mostra o cursor de "digitar" (I-beam)
+     sobre qualquer parágrafo/título — não só sobre inputs de verdade. */
+  cursor: default;
+}
+
+a,
+button,
+[role="button"],
+select,
+summary,
+label {
+  cursor: pointer;
+}
+
+/* Scrollbar no tom do site (Chrome/Safari; Firefox usa o scrollbar-color acima) */
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(var(--accent), var(--accent-deep));
+  border: 2px solid var(--surface);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(var(--accent-2), var(--accent));
+}
+
+::-webkit-scrollbar-corner {
+  background: var(--surface);
+}
+
+::selection {
+  background: var(--accent);
+  color: white;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* Camadas de fundo, fixas e fora do fluxo. */
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: -3;
+  pointer-events: none;
+  background:
+    radial-gradient(40rem 40rem at 15% 8%, rgba(155, 89, 182, 0.18), transparent 60%),
+    radial-gradient(35rem 35rem at 85% 35%, rgba(110, 60, 150, 0.16), transparent 60%),
+    radial-gradient(45rem 45rem at 50% 100%, rgba(44, 44, 84, 0.4), transparent 60%),
+    var(--background);
+}
+
+/* Luz que segue o ponteiro pelo site inteiro. Só pinta, não reflui. */
+.ambient::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    28rem 28rem at var(--mx) var(--my),
+    rgba(155, 89, 182, 0.13),
+    transparent 65%
+  );
+  transition: opacity 0.4s;
+}
+
+/* Granulado de filme: tira o "liso demais" dos degradês. */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* As classes reutilizáveis vão na camada `components` de propósito: assim um
+   `px-4` ou `rounded-3xl` do Tailwind ainda vence quando o componente precisar
+   fugir do padrão (utilities vem depois de components na cascata do v4). */
+@layer components {
+  .gradient-text {
+    background: linear-gradient(90deg, #b07cc6, var(--accent), #8e44ad, #b07cc6);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: gradientFlow 8s ease infinite;
+  }
+
+  /* Título de seção com um risco de luz embaixo. */
+  .section-title {
+    position: relative;
+    width: fit-content;
+    margin-inline: auto;
+  }
+
+  .section-title::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -0.55rem;
+    translate: -50% 0;
+    width: 3.5rem;
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono), monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent-2);
+  }
+
+  .glass {
+    background: color-mix(in srgb, var(--surface) 72%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  /* Card premium: borda que acende no ponteiro + luz interna que o segue.
+     Tudo em pseudo-elementos compostos — zero layout, roda liso no celular
+     (onde, sem hover, simplesmente não acende). */
+  .spot {
+    position: relative;
+    isolation: isolate;
+    border-radius: 1rem;
+    transition: transform 0.4s var(--ease-out), box-shadow 0.4s var(--ease-out);
+  }
+
+  .spot::before,
+  .spot::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.35s;
+  }
+
+  /* brilho interno */
+  .spot::before {
+    z-index: -1;
+    background: radial-gradient(
+      12rem 12rem at var(--px, 50%) var(--py, 50%),
+      rgba(199, 155, 224, 0.16),
+      transparent 70%
+    );
+  }
+
+  /* borda iluminada (máscara em anel de 1px) */
+  .spot::after {
+    padding: 1px;
+    background: radial-gradient(
+      10rem 10rem at var(--px, 50%) var(--py, 50%),
+      var(--accent-2),
+      transparent 65%
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+
+  /* Varredura de luz atravessando o elemento. */
+  .sheen {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .sheen::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -60%;
+    width: 45%;
+    height: 100%;
+    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.14), transparent);
+    transform: skewX(-18deg);
+    pointer-events: none;
+  }
+
+  .btn {
+    position: relative;
+    overflow: hidden;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    padding: 0.8rem 1.7rem;
+    border-radius: 999px;
+    font-weight: 500;
+    transition: transform 0.35s var(--ease-out), box-shadow 0.35s var(--ease-out),
+      border-color 0.3s, color 0.3s, background-color 0.3s;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+    color: #fff;
+    box-shadow: 0 10px 30px -10px rgba(155, 89, 182, 0.75);
+  }
+
+  .btn-ghost {
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: var(--foreground);
+  }
+
+  .btn:active {
+    transform: scale(0.97);
+  }
+
+  /* Pílula de filtro/aba. O indicador que desliza é um <motion.span layoutId>. */
+  .pill {
+    position: relative;
+    padding: 0.4rem 1rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    color: var(--muted);
+    transition: color 0.25s;
+    white-space: nowrap;
+  }
+
+  .pill[data-on="true"] {
+    color: #fff;
+  }
+
+  /* Entrada da home em CSS puro: pinta antes da hidratação (o LCP não espera JS). */
+  .rise {
+    animation: rise 0.75s var(--ease-out) both;
+  }
+
+  /* Faixa infinita. O conteúdo é duplicado no JSX pra emendar sem buraco. */
+  .marquee {
+    display: flex;
+    width: max-content;
+    animation: marquee var(--speed, 40s) linear infinite;
+  }
+
+  .marquee-mask {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  }
+
+  .marquee-hover:hover .marquee {
+    animation-play-state: paused;
+  }
+
+  /* Efeitos de ponteiro só onde existe ponteiro de verdade. No celular o card
+     fica estático — sem listener, sem repaint, sem gastar bateria. */
+  @media (hover: hover) and (pointer: fine) {
+    .spot:hover::before,
+    .spot:hover::after {
+      opacity: 1;
+    }
+
+    .spot:hover {
+      transform: translateY(-4px);
+    }
+
+    .sheen::before {
+      transition: left 0.75s var(--ease-out);
+    }
+
+    .sheen:hover::before {
+      left: 130%;
+    }
+
+    .btn-primary:hover {
+      box-shadow: 0 16px 40px -12px rgba(155, 89, 182, 0.95);
+    }
+
+    .btn-ghost:hover {
+      border-color: var(--accent);
+      color: var(--accent-2);
+    }
+  }
+
+  @media (hover: none) {
+    .ambient::after {
+      opacity: 0;
+    }
+
+    .glass {
+      /* backdrop-filter em tela cheia é o efeito mais caro na GPU de celular. */
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+    }
+  }
+}
+
+@keyframes gradientFlow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translate3d(0, 1.2rem, 0); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes orbit {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes orbitRev {
+  to { transform: rotate(-360deg); }
+}
+
+@keyframes floaty {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -0.5rem, 0); }
+}
+
+@keyframes pulseRing {
+  0% { transform: scale(0.9); opacity: 0.7; }
+  70%, 100% { transform: scale(1.9); opacity: 0; }
+}
+
+@keyframes marquee {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+
+  .rise { opacity: 1; transform: none; }
+
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

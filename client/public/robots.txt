@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /estudio
+
+Sitemap: https://www.joaoaugusto.dev/sitemap.xml
