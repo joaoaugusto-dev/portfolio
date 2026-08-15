@@ -156,8 +156,11 @@ router.post("/presign", requireAuth, asyncRoute(async (req, res) => {
 }));
 
 // 2) O navegador chama isso depois que o PUT direto pro R2 terminou: confirma
-// que o objeto existe de fato (nunca confia só no que o cliente diz), cria o
-// registro e — se for vídeo — baixa de volta só pra extrair o frame de capa.
+// que o objeto existe de fato (nunca confia só no que o cliente diz) e cria o
+// registro. A extração do poster de vídeo roda depois, em segundo plano (ver
+// generatePosterInBackground) — baixar o vídeo de volta + rodar ffmpeg dentro
+// da própria requisição estourava o timeout do proxy da Cloudflare/Render em
+// vídeo grande, derrubando a conexão com 502 antes do registro nem existir.
 router.post("/complete", requireAuth, asyncRoute(async (req, res) => {
   const { name, title, description } = req.body;
   if (!name) return res.status(400).json({ error: "name é obrigatório" });
@@ -182,25 +185,29 @@ router.post("/complete", requireAuth, asyncRoute(async (req, res) => {
   });
   await addUsage(size);
 
-  // Melhor-esforço: se a extração do frame falhar (codec exótico, ffmpeg
-  // ausente, etc.), o upload do vídeo já foi concluído e não deve quebrar por isso.
-  if (kind === "video") {
-    try {
-      const obj = await downloadObject(name);
-      if (obj) {
-        const poster = await extractPoster(obj.buffer);
-        if (poster) {
-          await uploadObject(posterKey(name), poster, "image/jpeg");
-          await addUsage(poster.length);
-        }
-      }
-    } catch (err) {
-      console.error(`Falha ao gerar poster para "${name}":`, err.message);
-    }
-  }
-
   res.status(201).json(present(media));
+
+  if (kind === "video") generatePosterInBackground(name);
 }));
+
+// Melhor-esforço, disparado depois de já ter respondido: se a extração do
+// frame falhar (codec exótico, vídeo enorme, etc.), o upload já foi
+// concluído do ponto de vista do usuário e não deve quebrar por isso.
+async function generatePosterInBackground(name) {
+  try {
+    const obj = await downloadObject(name);
+    if (!obj) return;
+    const poster = await extractPoster(obj.buffer);
+    if (!poster) return;
+    await uploadObject(posterKey(name), poster, "image/jpeg");
+    await addUsage(poster.length);
+    // updatedAt muda a versão da URL (?v=) — sem isso o front não sabe que uma
+    // miniatura nova apareceu depois da resposta inicial (que foi sem ela).
+    await Media.update({ updatedAt: new Date() }, { where: { name } });
+  } catch (err) {
+    console.error(`Falha ao gerar poster para "${name}":`, err.message);
+  }
+}
 
 // Miniatura escolhida à mão: ou uma imagem enviada direto, ou um instante do
 // próprio vídeo já armazenado (o admin manda o frame recortado no browser via
