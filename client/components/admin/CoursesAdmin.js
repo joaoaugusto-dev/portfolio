@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getCourses, api } from "@/lib/api";
+import { getCourses, api, FRESH } from "@/lib/api";
 import { revalidateHome } from "@/lib/actions";
 import useDragReorder from "@/lib/useDragReorder";
 import { Spot, Toast, useToast } from "@/components/Fx";
@@ -34,7 +34,7 @@ export default function CoursesAdmin({ token }) {
   async function refresh() {
     setLoading(true);
     try {
-      setCourses(await getCourses());
+      setCourses(await getCourses(FRESH));
       setError("");
     } catch (err) {
       setError(`Não consegui carregar os cursos: ${err.message}`);

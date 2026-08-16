@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getJourney, api } from "@/lib/api";
+import { getJourney, api, FRESH } from "@/lib/api";
 import { revalidateHome } from "@/lib/actions";
 import useDragReorder from "@/lib/useDragReorder";
 import { Spot, Toast, useToast } from "@/components/Fx";
@@ -43,7 +43,7 @@ export default function JourneyAdmin({ token }) {
   async function refresh() {
     setLoading(true);
     try {
-      setItems(await getJourney());
+      setItems(await getJourney(FRESH));
       setError("");
     } catch (err) {
       setError(`Não consegui carregar a jornada: ${err.message}`);

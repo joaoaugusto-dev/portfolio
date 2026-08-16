@@ -111,9 +111,22 @@ export default function RootLayout({ children }) {
           mais, não um mismatch de atributo — por isso a flag vai no pai (<head>), não
           no <link>: suppressHydrationWarning só cobre um nível abaixo de onde é posta. */}
       <head suppressHydrationWarning>
-        <link
-          rel="stylesheet"
-          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css"
+        {/* O Font Awesome vem de outro domínio, e como <link rel="stylesheet"> ele
+            bloqueava a primeira pintura: o celular ainda tinha que resolver DNS,
+            abrir TLS e baixar 20KB no cdnjs antes de desenhar qualquer texto.
+            Injetado por script com media="print", ele nunca é render-blocking —
+            o onload devolve pra "all" e os ícones entram logo depois. Só ícone
+            depende dele, então o pior caso é um ícone aparecer alguns ms atrasado.
+            Continua sendo CDN (e não next/font ou bundle) porque os ícones são
+            dado: o admin escolhe "fa-solid fa-x" no IconPicker e isso vai pro banco. */}
+        <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossOrigin="anonymous" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              `var l=document.createElement('link');l.rel='stylesheet';l.media='print';` +
+              `l.href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css';` +
+              `l.onload=function(){this.media='all'};document.head.appendChild(l);`,
+          }}
         />
         <script
           type="application/ld+json"

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getProjects, api } from "@/lib/api";
+import { getProjects, api, FRESH } from "@/lib/api";
 import { revalidateHome } from "@/lib/actions";
 import useDragReorder from "@/lib/useDragReorder";
 import { Spot, Toast, useToast } from "@/components/Fx";
@@ -26,7 +26,7 @@ export default function ProjectsAdmin({ token }) {
   async function refresh() {
     setLoading(true);
     try {
-      setProjects(await getProjects());
+      setProjects(await getProjects(FRESH));
       setError("");
     } catch (err) {
       // Antes isso virava uma lista vazia em silêncio e parecia "não tem projeto".

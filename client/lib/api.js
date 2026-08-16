@@ -1,11 +1,19 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-// Os fetches de conteúdo vão sem cache de propósito. Antes tinham
-// `next: { revalidate: 60 }`, e o Data Cache do Next ficava servindo a resposta
-// velha da API: a home até regenerava (a Vercel voltava na origem), só que
-// renderizava em cima de dados antigos — o site travou em 9 fotos com 13 no
-// banco. Sem Data Cache sobra uma camada só de cache, a da página (ISR, ver
-// `revalidate` em app/page.js), que é a que comprovadamente funciona.
+// `no-store` aqui não deixava só o Data Cache de fora: ele marca a rota inteira
+// como dinâmica. O `revalidate = 60` da home virava enfeite (`next build`
+// mostrava `ƒ /`, não ISR) e TODA visita renderizava na hora, esperando a API
+// no Render — que no plano free dorme depois de 15min e acorda em segundos.
+// Era o TTFB de 4,4s no mobile.
+//
+// Cacheado, o mesmo intervalo do Data Cache e da página (60s) mantém as duas
+// camadas em fase — o descompasso é o que travava a home em 9 fotos com 13 no
+// banco. E `expireTime: 120` (next.config.mjs) é o teto: se a revalidação em
+// background falhar, o CDN é obrigado a renderizar de novo, nada congela.
+const CACHED = { next: { revalidate: 60 } };
+
+// O admin lê pra editar: precisa do banco agora, não de até 60s atrás.
+export const FRESH = { cache: "no-store" };
 
 export async function getMedia(name) {
   const res = await fetch(`${API_URL}/api/files/meta/${encodeURIComponent(name)}`, { cache: "no-store" });
@@ -13,26 +21,26 @@ export async function getMedia(name) {
   return res.json();
 }
 
-export async function getProjects() {
-  const res = await fetch(`${API_URL}/api/projects`, { cache: "no-store" });
+export async function getProjects(opts = CACHED) {
+  const res = await fetch(`${API_URL}/api/projects`, opts);
   if (!res.ok) throw new Error("Failed to load projects");
   return res.json();
 }
 
-export async function getCourses() {
-  const res = await fetch(`${API_URL}/api/courses`, { cache: "no-store" });
+export async function getCourses(opts = CACHED) {
+  const res = await fetch(`${API_URL}/api/courses`, opts);
   if (!res.ok) throw new Error("Failed to load courses");
   return res.json();
 }
 
-export async function getJourney() {
-  const res = await fetch(`${API_URL}/api/journey`, { cache: "no-store" });
+export async function getJourney(opts = CACHED) {
+  const res = await fetch(`${API_URL}/api/journey`, opts);
   if (!res.ok) throw new Error("Failed to load journey");
   return res.json();
 }
 
-export async function getGallery() {
-  const res = await fetch(`${API_URL}/api/gallery`, { cache: "no-store" });
+export async function getGallery(opts = CACHED) {
+  const res = await fetch(`${API_URL}/api/gallery`, opts);
   if (!res.ok) throw new Error("Failed to load gallery");
   return res.json();
 }
@@ -92,6 +100,8 @@ export const api = {
     authedFetch(`/api/gallery/${id}`, token, { method: "PUT", body: JSON.stringify(data) }),
   deleteGalleryItem: (token, id) =>
     authedFetch(`/api/gallery/${id}`, token, { method: "DELETE" }),
+  reorderGallery: (token, ids) =>
+    authedFetch("/api/gallery/reorder", token, { method: "PUT", body: JSON.stringify({ ids }) }),
   uploadCover: (token, file) => {
     const form = new FormData();
     form.append("file", file);
