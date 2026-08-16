@@ -1,4 +1,5 @@
 import { Geist, Geist_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { I18nProvider } from "@/components/I18n";
 import Fx from "@/components/Fx";
@@ -121,6 +122,7 @@ export default function RootLayout({ children }) {
       <body className="min-h-full antialiased">
         <Fx />
         <I18nProvider>{children}</I18nProvider>
+        <Analytics />
       </body>
     </html>
   );
