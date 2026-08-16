@@ -9,10 +9,31 @@ const fmt = (s) => {
   return `${m}:${String(r).padStart(2, "0")}`;
 };
 
+// Quanto precisa estar bufferado à frente do ponteiro antes de (re)começar a
+// tocar. Segura o play mostrando loading em vez de tocar e travar de novo 1s
+// depois — melhor esperar uma vez do que engasgar toda hora.
+const BUFFER_AHEAD = 15;
+// Sem nenhum "progress" (bytes novos chegando) por esse tempo enquanto
+// espera buffer, a conexão caiu de verdade — não é só uma rede lenta.
+const STALL_TIMEOUT = 10000;
+
+function bufferedAheadOf(v) {
+  const { buffered, currentTime } = v;
+  for (let i = 0; i < buffered.length; i++) {
+    if (currentTime >= buffered.start(i) && currentTime <= buffered.end(i)) {
+      return buffered.end(i) - currentTime;
+    }
+  }
+  return 0;
+}
+
 export default function VideoPlayer({ src, poster, title }) {
   const videoRef = useRef(null);
   const barRef = useRef(null);
   const hideTimer = useRef(null);
+  const stallTimer = useRef(null);
+  const wantsPlay = useRef(false);
+  const loadingRef = useRef(false);
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -22,11 +43,55 @@ export default function VideoPlayer({ src, poster, title }) {
   const [showControls, setShowControls] = useState(true);
   const [scrubbing, setScrubbing] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [connectionLost, setConnectionLost] = useState(false);
+
+  function setLoadingBoth(v) {
+    loadingRef.current = v;
+    setLoading(v);
+  }
+
+  function clearStallTimer() {
+    clearTimeout(stallTimer.current);
+    stallTimer.current = null;
+  }
+
+  function armStallTimer() {
+    clearStallTimer();
+    stallTimer.current = setTimeout(() => setConnectionLost(true), STALL_TIMEOUT);
+  }
+
+  // Não chama v.play() direto: pede pra tocar e só solta quando tiver
+  // BUFFER_AHEAD segundos guardados (ou o vídeo já estiver perto do fim).
+  function requestPlay() {
+    const v = videoRef.current;
+    wantsPlay.current = true;
+    setConnectionLost(false);
+    const remaining = (v.duration || Infinity) - v.currentTime;
+    if (bufferedAheadOf(v) >= Math.min(BUFFER_AHEAD, remaining)) {
+      v.play();
+    } else {
+      setLoadingBoth(true);
+      armStallTimer();
+    }
+  }
 
   function togglePlay() {
     const v = videoRef.current;
-    if (v.paused) v.play();
-    else v.pause();
+    if (v.paused) requestPlay();
+    else {
+      wantsPlay.current = false;
+      v.pause();
+    }
+  }
+
+  function retryConnection() {
+    const v = videoRef.current;
+    const resumeAt = v.currentTime;
+    setConnectionLost(false);
+    v.load();
+    v.currentTime = resumeAt;
+    requestPlay();
   }
 
   function seekTo(clientX) {
@@ -50,21 +115,52 @@ export default function VideoPlayer({ src, poster, title }) {
     const onDuration = () => setDuration(v.duration);
     const onProgress = () => {
       if (v.buffered.length) setBuffered(v.buffered.end(v.buffered.length - 1));
+      // Byte chegou: a rede está viva, então não é queda de conexão. Se ainda
+      // não juntou o buffer que queremos, só reseta o prazo de espera.
+      if (wantsPlay.current) {
+        clearStallTimer();
+        if (loadingRef.current) {
+          const remaining = (v.duration || Infinity) - v.currentTime;
+          if (bufferedAheadOf(v) >= Math.min(BUFFER_AHEAD, remaining)) v.play();
+          else armStallTimer();
+        }
+      }
     };
-    const onPlay = () => setPlaying(true);
+    const onPlay = () => {
+      setPlaying(true);
+      setLoadingBoth(false);
+      clearStallTimer();
+    };
     const onPause = () => setPlaying(false);
+    // "Travei, faltou dado" — nosso próprio play() dispara isso se o buffer
+    // ainda não chegou no ponto pedido; deixa o loading em pé.
+    const onWaiting = () => {
+      if (wantsPlay.current) {
+        setLoadingBoth(true);
+        armStallTimer();
+      }
+    };
+    const onError = () => {
+      if (wantsPlay.current) setConnectionLost(true);
+    };
     v.addEventListener("timeupdate", onTime);
     v.addEventListener("loadedmetadata", onDuration);
     v.addEventListener("progress", onProgress);
     v.addEventListener("play", onPlay);
     v.addEventListener("pause", onPause);
+    v.addEventListener("waiting", onWaiting);
+    v.addEventListener("error", onError);
     return () => {
       v.removeEventListener("timeupdate", onTime);
       v.removeEventListener("loadedmetadata", onDuration);
       v.removeEventListener("progress", onProgress);
       v.removeEventListener("play", onPlay);
       v.removeEventListener("pause", onPause);
+      v.removeEventListener("waiting", onWaiting);
+      v.removeEventListener("error", onError);
+      clearStallTimer();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- armStallTimer só usa refs e setState estáveis, recriar por render não muda o comportamento
   }, []);
 
   useEffect(() => {
@@ -120,7 +216,7 @@ export default function VideoPlayer({ src, poster, title }) {
 
       {/* Play/pause central, com pulso suave ao pausar */}
       <AnimatePresence>
-        {!playing && (
+        {!playing && !loading && !connectionLost && (
           <motion.div
             initial={{ opacity: 0, scale: 0.7 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -131,6 +227,46 @@ export default function VideoPlayer({ src, poster, title }) {
             <span className="w-20 h-20 rounded-full bg-black/50 backdrop-blur flex items-center justify-center">
               <i className="fa-solid fa-play text-3xl text-white ml-1" aria-hidden />
             </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Carregando buffer — no início ou depois de esvaziar no meio do vídeo */}
+      <AnimatePresence>
+        {loading && !connectionLost && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 pointer-events-none"
+          >
+            <i className="fa-solid fa-circle-notch fa-spin text-4xl text-white/90" aria-hidden />
+            <span className="text-xs text-white/70">Carregando...</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Conexão caiu no meio do carregamento — dá pra tentar de novo do mesmo ponto */}
+      <AnimatePresence>
+        {connectionLost && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={(e) => e.stopPropagation()}
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 px-4 text-center"
+          >
+            <i className="fa-solid fa-wifi text-3xl text-white/80" aria-hidden />
+            <p className="text-sm text-white/80">Perdemos a conexão com o vídeo.</p>
+            <button
+              onClick={retryConnection}
+              className="rounded-lg border border-white/25 px-4 py-1.5 text-sm text-white transition-colors hover:border-accent-2 hover:text-accent-2"
+            >
+              <i className="fa-solid fa-rotate mr-2" aria-hidden />
+              Tentar de novo
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
