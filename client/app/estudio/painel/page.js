@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSession } from "@/lib/useSession";
+import { revalidateHome } from "@/lib/actions";
+import { Toast, useToast } from "@/components/Fx";
 import ProjectsAdmin from "@/components/admin/ProjectsAdmin";
 import FilesAdmin from "@/components/admin/FilesAdmin";
 import CoursesAdmin from "@/components/admin/CoursesAdmin";
@@ -24,10 +26,27 @@ export default function Dashboard() {
   const { supabase, session, loading } = useSession();
   const router = useRouter();
   const [tab, setTab] = useState("projects");
+  const [syncing, setSyncing] = useState(false);
+  const [toast, notify] = useToast();
 
   useEffect(() => {
     if (!loading && !session) router.replace(`/${ADMIN_PATH}`);
   }, [loading, session, router]);
+
+  // Escape hatch: todo salvamento já manda atualizar a home sozinho, mas se
+  // aquele sinal falhar (rede caindo, aba aberta desde antes de um deploy),
+  // dá pra reenviar por aqui sem ter que salvar de novo.
+  async function forceSync() {
+    setSyncing(true);
+    try {
+      await revalidateHome();
+      notify("Home atualizada.");
+    } catch {
+      notify("Não consegui atualizar. Recarregue esta página e tente de novo.", "error");
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   if (loading || !session) return null;
 
@@ -44,6 +63,15 @@ export default function Dashboard() {
           <p className="truncate text-xs text-muted">{session.user?.email}</p>
         </div>
         <div className="flex shrink-0 gap-2">
+          <button
+            onClick={forceSync}
+            disabled={syncing}
+            className="rounded-lg border border-white/10 px-3 py-2 text-sm transition-colors hover:border-accent hover:text-accent-2 disabled:opacity-50"
+            title="Reenviar o sinal de atualização pra home"
+          >
+            <i className={`fa-solid ${syncing ? "fa-circle-notch fa-spin" : "fa-rotate"}`} aria-hidden />
+            <span className="ml-2 hidden sm:inline">Atualizar site</span>
+          </button>
           <Link
             href="/"
             className="rounded-lg border border-white/10 px-3 py-2 text-sm transition-colors hover:border-accent hover:text-accent-2"
@@ -98,6 +126,8 @@ export default function Dashboard() {
           {tab === "files" && <FilesAdmin token={session.access_token} />}
         </motion.div>
       </AnimatePresence>
+
+      <Toast toast={toast} />
     </main>
   );
 }

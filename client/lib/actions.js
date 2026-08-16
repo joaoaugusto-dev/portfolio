@@ -6,5 +6,8 @@ import { revalidatePath } from "next/cache";
 // pouco tráfego a home ficava velha por muito tempo. Como Server Function, a
 // revalidação acontece na hora da chamada.
 export async function revalidateHome() {
-  revalidatePath("/");
+  // "layout" em vez do padrão "page": limpa também o cache de cliente e os
+  // dados abaixo do layout raiz, que é onde a home busca projetos, cursos,
+  // jornada e galeria.
+  revalidatePath("/", "layout");
 }
