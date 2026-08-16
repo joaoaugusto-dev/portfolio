@@ -9,23 +9,10 @@ const fmt = (s) => {
   return `${m}:${String(r).padStart(2, "0")}`;
 };
 
-// Quanto precisa estar bufferado à frente do ponteiro antes de (re)começar a
-// tocar. Segura o play mostrando loading em vez de tocar e travar de novo 1s
-// depois — melhor esperar uma vez do que engasgar toda hora.
-const BUFFER_AHEAD = 15;
-// Sem nenhum "progress" (bytes novos chegando) por esse tempo enquanto
-// espera buffer, a conexão caiu de verdade — não é só uma rede lenta.
+// Sem nenhum "progress" (bytes novos chegando) por esse tempo enquanto o
+// vídeo está travado esperando dado, a conexão caiu de verdade — não é só
+// uma rede lenta buferizando.
 const STALL_TIMEOUT = 10000;
-
-function bufferedAheadOf(v) {
-  const { buffered, currentTime } = v;
-  for (let i = 0; i < buffered.length; i++) {
-    if (currentTime >= buffered.start(i) && currentTime <= buffered.end(i)) {
-      return buffered.end(i) - currentTime;
-    }
-  }
-  return 0;
-}
 
 export default function VideoPlayer({ src, poster, title }) {
   const videoRef = useRef(null);
@@ -33,23 +20,21 @@ export default function VideoPlayer({ src, poster, title }) {
   const hideTimer = useRef(null);
   const stallTimer = useRef(null);
   const wantsPlay = useRef(false);
-  const loadingRef = useRef(false);
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [buffered, setBuffered] = useState(0);
   const [volume, setVolume] = useState(1);
-  const [muted, setMuted] = useState(false);
+  // Começa mudo: é a única forma de o navegador deixar autoplay tocar assim
+  // que a página abre. O botão de som já resolve destravar o áudio depois.
+  const [muted, setMuted] = useState(true);
   const [showControls, setShowControls] = useState(true);
   const [scrubbing, setScrubbing] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  // Começa true: a página abre e já queremos o loading visível antes de
+  // qualquer evento do <video> disparar.
+  const [loading, setLoading] = useState(true);
   const [connectionLost, setConnectionLost] = useState(false);
-
-  function setLoadingBoth(v) {
-    loadingRef.current = v;
-    setLoading(v);
-  }
 
   function clearStallTimer() {
     clearTimeout(stallTimer.current);
@@ -61,19 +46,21 @@ export default function VideoPlayer({ src, poster, title }) {
     stallTimer.current = setTimeout(() => setConnectionLost(true), STALL_TIMEOUT);
   }
 
-  // Não chama v.play() direto: pede pra tocar e só solta quando tiver
-  // BUFFER_AHEAD segundos guardados (ou o vídeo já estiver perto do fim).
+  // Toca assim que der — o navegador já buferiza progressivamente sozinho
+  // enquanto passa, sem precisar esperar um buffer mínimo antes de começar.
+  // Se não tiver dado nenhum ainda, o próprio <video> dispara "waiting" (ver
+  // abaixo), que é o que liga o loading.
   function requestPlay() {
     const v = videoRef.current;
     wantsPlay.current = true;
     setConnectionLost(false);
-    const remaining = (v.duration || Infinity) - v.currentTime;
-    if (bufferedAheadOf(v) >= Math.min(BUFFER_AHEAD, remaining)) {
-      v.play();
-    } else {
-      setLoadingBoth(true);
-      armStallTimer();
-    }
+    v.play().catch(() => {
+      // Navegador recusou o autoplay (modo economia de dados, política mais
+      // estrita, etc.) — sem isso o loading ficava girando pra sempre. Volta
+      // pro botão de play parado, esperando um clique.
+      wantsPlay.current = false;
+      setLoading(false);
+    });
   }
 
   function togglePlay() {
@@ -88,7 +75,6 @@ export default function VideoPlayer({ src, poster, title }) {
   function retryConnection() {
     const v = videoRef.current;
     const resumeAt = v.currentTime;
-    setConnectionLost(false);
     v.load();
     v.currentTime = resumeAt;
     requestPlay();
@@ -115,28 +101,23 @@ export default function VideoPlayer({ src, poster, title }) {
     const onDuration = () => setDuration(v.duration);
     const onProgress = () => {
       if (v.buffered.length) setBuffered(v.buffered.end(v.buffered.length - 1));
-      // Byte chegou: a rede está viva, então não é queda de conexão. Se ainda
-      // não juntou o buffer que queremos, só reseta o prazo de espera.
-      if (wantsPlay.current) {
-        clearStallTimer();
-        if (loadingRef.current) {
-          const remaining = (v.duration || Infinity) - v.currentTime;
-          if (bufferedAheadOf(v) >= Math.min(BUFFER_AHEAD, remaining)) v.play();
-          else armStallTimer();
-        }
-      }
+      // Byte chegou: a rede está viva, não é queda de conexão — só adia o prazo.
+      if (wantsPlay.current) clearStallTimer();
     };
-    const onPlay = () => {
+    // "playing" (não "play"): dispara quando o vídeo REALMENTE está exibindo
+    // quadros, não só quando play() foi chamado — é o sinal certo de tirar o loading.
+    const onPlaying = () => {
       setPlaying(true);
-      setLoadingBoth(false);
+      setLoading(false);
       clearStallTimer();
     };
     const onPause = () => setPlaying(false);
-    // "Travei, faltou dado" — nosso próprio play() dispara isso se o buffer
-    // ainda não chegou no ponto pedido; deixa o loading em pé.
+    // Travou por falta de dado — no início ou no meio do vídeo. O navegador
+    // retoma sozinho assim que tiver o suficiente; só mostramos o loading
+    // enquanto isso e armamos o prazo de "conexão caiu" nesse meio-tempo.
     const onWaiting = () => {
       if (wantsPlay.current) {
-        setLoadingBoth(true);
+        setLoading(true);
         armStallTimer();
       }
     };
@@ -146,7 +127,7 @@ export default function VideoPlayer({ src, poster, title }) {
     v.addEventListener("timeupdate", onTime);
     v.addEventListener("loadedmetadata", onDuration);
     v.addEventListener("progress", onProgress);
-    v.addEventListener("play", onPlay);
+    v.addEventListener("playing", onPlaying);
     v.addEventListener("pause", onPause);
     v.addEventListener("waiting", onWaiting);
     v.addEventListener("error", onError);
@@ -154,13 +135,20 @@ export default function VideoPlayer({ src, poster, title }) {
       v.removeEventListener("timeupdate", onTime);
       v.removeEventListener("loadedmetadata", onDuration);
       v.removeEventListener("progress", onProgress);
-      v.removeEventListener("play", onPlay);
+      v.removeEventListener("playing", onPlaying);
       v.removeEventListener("pause", onPause);
       v.removeEventListener("waiting", onWaiting);
       v.removeEventListener("error", onError);
       clearStallTimer();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- armStallTimer só usa refs e setState estáveis, recriar por render não muda o comportamento
+  }, []);
+
+  // Autoplay ao entrar na página — sem esperar clique nenhum. Toca o
+  // elemento de vídeo (sistema externo), não é estado sincronizado do React.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- dispara o <video>, único jeito de tocar assim que a página abre
+    requestPlay();
   }, []);
 
   useEffect(() => {
@@ -203,6 +191,9 @@ export default function VideoPlayer({ src, poster, title }) {
         poster={poster}
         className="w-full h-full"
         playsInline
+        muted={muted}
+        // Autoplay já força o carregamento de qualquer forma — preload é só
+        // uma dica pra quando NÃO tem play() automático, então não muda nada aqui.
         preload="metadata"
         onVolumeChange={(e) => {
           setVolume(e.target.volume);
