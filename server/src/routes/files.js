@@ -62,20 +62,26 @@ function findBySlug(slug) {
   return Media.findOne({ where: { [Op.or]: [{ name: slug }, { name: { [Op.like]: `${slug}.%` } }] } });
 }
 
-const present = (m) => ({
-  name: m.name,
-  title: m.title,
-  description: m.description,
-  kind: m.kind,
-  mimetype: m.mimetype,
-  size: m.size,
-  createdAt: m.createdAt,
-  url: rawPath(m.name),
-  pageUrl: pagePath(m.name),
-  // ?v= muda sempre que a miniatura é trocada — sem isso o cache "immutable"
-  // da rota de poster (1 ano) segurava a imagem antiga depois de escolher outra.
-  posterUrl: m.kind === "video" ? `${rawPath(m.name)}/poster?v=${new Date(m.updatedAt).getTime()}` : undefined,
-});
+const present = (m) => {
+  const v = new Date(m.updatedAt).getTime();
+  return {
+    name: m.name,
+    title: m.title,
+    description: m.description,
+    kind: m.kind,
+    mimetype: m.mimetype,
+    size: m.size,
+    createdAt: m.createdAt,
+    // ?v= é o que muda a URL — cache de CDN é sempre por URL exata. Sem isso,
+    // um vídeo enviado antes do fix de Cache-Control em Range (raw/:name)
+    // ficava com uma resposta errada presa no CDN pra sempre (immutable,
+    // 1 ano): a query nova troca a chave de cache e destrava sem precisar
+    // invalidar nada manualmente.
+    url: `${rawPath(m.name)}?v=${v}`,
+    pageUrl: pagePath(m.name),
+    posterUrl: m.kind === "video" ? `${rawPath(m.name)}/poster?v=${v}` : undefined,
+  };
+};
 
 router.get("/", requireAuth, asyncRoute(async (req, res) => {
   const files = await Media.findAll({ order: [["createdAt", "DESC"]] });
