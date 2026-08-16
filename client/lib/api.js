@@ -1,33 +1,38 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
+// Os fetches de conteúdo vão sem cache de propósito. Antes tinham
+// `next: { revalidate: 60 }`, e o Data Cache do Next ficava servindo a resposta
+// velha da API: a home até regenerava (a Vercel voltava na origem), só que
+// renderizava em cima de dados antigos — o site travou em 9 fotos com 13 no
+// banco. Sem Data Cache sobra uma camada só de cache, a da página (ISR, ver
+// `revalidate` em app/page.js), que é a que comprovadamente funciona.
+
 export async function getMedia(name) {
-  const res = await fetch(`${API_URL}/api/files/meta/${encodeURIComponent(name)}`, {
-    next: { revalidate: 60 },
-  });
+  const res = await fetch(`${API_URL}/api/files/meta/${encodeURIComponent(name)}`, { cache: "no-store" });
   if (!res.ok) throw new Error("Mídia não encontrada");
   return res.json();
 }
 
 export async function getProjects() {
-  const res = await fetch(`${API_URL}/api/projects`, { next: { revalidate: 60 } });
+  const res = await fetch(`${API_URL}/api/projects`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to load projects");
   return res.json();
 }
 
 export async function getCourses() {
-  const res = await fetch(`${API_URL}/api/courses`, { next: { revalidate: 60 } });
+  const res = await fetch(`${API_URL}/api/courses`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to load courses");
   return res.json();
 }
 
 export async function getJourney() {
-  const res = await fetch(`${API_URL}/api/journey`, { next: { revalidate: 60 } });
+  const res = await fetch(`${API_URL}/api/journey`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to load journey");
   return res.json();
 }
 
 export async function getGallery() {
-  const res = await fetch(`${API_URL}/api/gallery`, { next: { revalidate: 60 } });
+  const res = await fetch(`${API_URL}/api/gallery`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to load gallery");
   return res.json();
 }

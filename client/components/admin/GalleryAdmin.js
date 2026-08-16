@@ -6,6 +6,7 @@ import { revalidateHome } from "@/lib/actions";
 import { sortGalleryByDate, groupByEvent, formatEventDate, eventKey } from "@/lib/gallerySort";
 import { Spot, Toast, useToast } from "@/components/Fx";
 import ImageCropUpload from "@/components/admin/ImageCropUpload";
+import CropModal, { loadImage } from "@/components/admin/CropModal";
 
 const emptyEvent = { eventName: "", eventNameEn: "", eventDate: "" };
 const emptyItem = { image: "", width: null, height: null, captionPt: "", captionEn: "", ...emptyEvent };
@@ -30,6 +31,7 @@ export default function GalleryAdmin({ token }) {
   const [picked, setPicked] = useState([]); // { uid, file, url, captionPt, captionEn }
   const [progress, setProgress] = useState(null); // { done, total } enquanto envia
   const [over, setOver] = useState(false);
+  const [cropping, setCropping] = useState(null); // foto do lote sendo recortada
   const fileRef = useRef(null);
 
   // Edição de uma foto só (null = formulário está no modo lote).
@@ -64,17 +66,39 @@ export default function GalleryAdmin({ token }) {
 
   // ---------- adição em massa ----------
 
-  function addFiles(list) {
-    const novos = [...list]
-      .filter((f) => f.type.startsWith("image/"))
-      .map((file) => ({
-        uid: `${file.name}-${file.size}-${Math.random()}`,
-        file,
-        url: URL.createObjectURL(file),
-        captionPt: "",
-        captionEn: "",
-      }));
+  async function addFiles(list) {
+    const novos = await Promise.all(
+      [...list]
+        .filter((f) => f.type.startsWith("image/"))
+        .map(async (file) => {
+          const url = URL.createObjectURL(file);
+          const img = await loadImage(url).catch(() => null);
+          return {
+            uid: `${file.name}-${file.size}-${Math.random()}`,
+            file,
+            url,
+            naturalAspect: img ? img.naturalWidth / img.naturalHeight : 1,
+            captionPt: "",
+            captionEn: "",
+          };
+        }),
+    );
     if (novos.length) setPicked((p) => [...p, ...novos]);
+  }
+
+  // Troca o arquivo da foto pelo recorte, ainda antes de enviar — o upload no
+  // submit usa p.file, então não muda mais nada no fluxo.
+  async function applyCrop(blob) {
+    const url = URL.createObjectURL(blob);
+    const img = await loadImage(url).catch(() => null);
+    setPicked((l) =>
+      l.map((x) => {
+        if (x.uid !== cropping.uid) return x;
+        URL.revokeObjectURL(x.url);
+        return { ...x, file: blob, url, naturalAspect: img ? img.naturalWidth / img.naturalHeight : x.naturalAspect };
+      }),
+    );
+    setCropping(null);
   }
 
   function removePicked(uid) {
@@ -98,10 +122,11 @@ export default function GalleryAdmin({ token }) {
     }
     setError("");
     setProgress({ done: 0, total: picked.length });
+    let enviadas = 0;
     try {
       // Uma de cada vez de propósito: o backend é free tier, e assim o contador
       // mostra progresso real em vez de tudo travar junto.
-      for (const [i, p] of picked.entries()) {
+      for (const p of picked) {
         const { url, width, height } = await api.uploadCover(token, p.file);
         await api.createGalleryItem(token, {
           image: url,
@@ -111,18 +136,26 @@ export default function GalleryAdmin({ token }) {
           captionEn: p.captionEn,
           ...event,
         });
-        setProgress({ done: i + 1, total: picked.length });
+        enviadas += 1;
+        setProgress({ done: enviadas, total: picked.length });
       }
       notify(picked.length === 1 ? "Foto adicionada" : `${picked.length} fotos adicionadas`);
       clearPicked();
-      refresh();
-      syncHome();
     } catch (err) {
-      setError(`Parei no meio: ${err.message}. As fotos que já subiram estão na lista.`);
+      // Só as que ainda não subiram continuam na lista — senão tentar de novo
+      // subiria duplicado o que já entrou.
+      setPicked((l) => {
+        l.slice(0, enviadas).forEach((x) => URL.revokeObjectURL(x.url));
+        return l.slice(enviadas);
+      });
+      setError(`Enviei ${enviadas} de ${picked.length} e parei: ${err.message}. As que faltam continuam na lista.`);
       notify(err.message, "error");
-      refresh();
     } finally {
       setProgress(null);
+      if (enviadas) {
+        refresh();
+        syncHome();
+      }
     }
   }
 
@@ -332,14 +365,25 @@ export default function GalleryAdmin({ token }) {
                       className={`${field} py-1.5 text-sm`}
                     />
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => removePicked(p.uid)}
-                    aria-label="Tirar da lista"
-                    className="h-8 w-8 shrink-0 self-start rounded-lg border border-white/10 text-sm text-muted transition-colors hover:border-red-500/40 hover:text-red-400"
-                  >
-                    <i className="fa-solid fa-xmark" aria-hidden />
-                  </button>
+                  <div className="flex shrink-0 flex-col gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setCropping(p)}
+                      aria-label="Cortar esta foto"
+                      title="Cortar"
+                      className="h-8 w-8 rounded-lg border border-white/10 text-sm text-muted transition-colors hover:border-accent hover:text-accent-2"
+                    >
+                      <i className="fa-solid fa-crop-simple" aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removePicked(p.uid)}
+                      aria-label="Tirar da lista"
+                      className="h-8 w-8 rounded-lg border border-white/10 text-sm text-muted transition-colors hover:border-red-500/40 hover:text-red-400"
+                    >
+                      <i className="fa-solid fa-xmark" aria-hidden />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -479,6 +523,18 @@ export default function GalleryAdmin({ token }) {
           </p>
         )}
       </div>
+
+      <AnimatePresence>
+        {cropping && (
+          <CropModal
+            src={cropping.url}
+            naturalAspect={cropping.naturalAspect}
+            confirmLabel="Usar recorte"
+            onCancel={() => setCropping(null)}
+            onConfirm={applyCrop}
+          />
+        )}
+      </AnimatePresence>
 
       <Toast toast={toast} />
     </div>

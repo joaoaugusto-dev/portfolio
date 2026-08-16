@@ -10,6 +10,10 @@ import Contact from "@/components/Contact";
 import Footer from "@/components/Footer";
 import { getProjects, getCourses, getJourney, getGithubStats, getGallery } from "@/lib/api";
 
+// Único cache que sobrou da home: a página é regerada no máximo a cada 60s, e
+// cada regeneração busca os dados na API sem cache (ver lib/api.js).
+export const revalidate = 60;
+
 export default async function Home() {
   const [projects, courses, journey, github, gallery] = await Promise.all([
     getProjects().catch(() => []),
