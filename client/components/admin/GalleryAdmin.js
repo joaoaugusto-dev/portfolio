@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { getGallery, api } from "@/lib/api";
+import { getGallery, api, FRESH } from "@/lib/api";
 import { revalidateHome } from "@/lib/actions";
 import { sortGalleryByDate, groupByEvent, formatEventDate, eventKey } from "@/lib/gallerySort";
+import useDragReorder from "@/lib/useDragReorder";
 import { Spot, Toast, useToast } from "@/components/Fx";
 import ImageCropUpload from "@/components/admin/ImageCropUpload";
 import CropModal, { loadImage } from "@/components/admin/CropModal";
@@ -44,7 +45,7 @@ export default function GalleryAdmin({ token }) {
   async function refresh() {
     setLoading(true);
     try {
-      setItems(await getGallery());
+      setItems(await getGallery(FRESH));
       setError("");
     } catch (err) {
       setError(`Não consegui carregar a galeria: ${err.message}`);
@@ -226,7 +227,41 @@ export default function GalleryAdmin({ token }) {
     }
   }
 
-  const folders = groupByEvent(sortGalleryByDate(items));
+  // ---------- arrastar pra reordenar dentro da pasta ----------
+
+  // { key, ids } com a ordem provisória enquanto arrasta — só existe durante o
+  // gesto, pra várias pastas abertas ao mesmo tempo não brigarem pelo mesmo
+  // estado. "group" no hook (a chave da pasta) impede o arraste de pular pra
+  // dentro de outra pasta.
+  const [dragOverride, setDragOverride] = useState(null);
+  const { dragging, start, move, end } = useDragReorder(
+    (updater) => setDragOverride((cur) => (cur ? { ...cur, ids: updater(cur.ids) } : cur)),
+    saveFolderOrder,
+  );
+
+  function startDrag(e, i, f) {
+    setDragOverride({ key: f.key, ids: f.items.map((it) => it.id) });
+    start(e, i, f.key ?? "sem-evento");
+  }
+
+  async function saveFolderOrder() {
+    const ov = dragOverride;
+    setDragOverride(null);
+    if (!ov) return;
+    try {
+      setItems(await api.reorderGallery(token, ov.ids));
+      syncHome();
+    } catch (err) {
+      notify(err.message, "error");
+      refresh();
+    }
+  }
+
+  const folders = groupByEvent(sortGalleryByDate(items)).map((f) =>
+    dragOverride?.key === f.key
+      ? { ...f, items: dragOverride.ids.map((id) => f.items.find((it) => it.id === id)) }
+      : f,
+  );
   const destinos = folders.filter((f) => f.key);
   const enviando = progress !== null;
 
@@ -410,7 +445,8 @@ export default function GalleryAdmin({ token }) {
         </h2>
         <p className="-mt-2 text-xs text-muted">
           Cada pasta é um evento e vira uma seção na home, da data mais recente pra mais antiga. Fotos
-          sem evento ficam soltas no fim.
+          sem evento ficam soltas no fim. Arraste pelo <i className="fa-solid fa-grip-vertical" aria-hidden />{" "}
+          para mudar a ordem das fotos dentro da pasta.
         </p>
 
         {loading && [0, 1].map((i) => <div key={i} className="h-24 animate-pulse rounded-xl bg-surface/70" />)}
@@ -467,8 +503,28 @@ export default function GalleryAdmin({ token }) {
                   className="overflow-hidden"
                 >
                   <div className="space-y-2 p-3">
-                    {f.items.map((it) => (
-                      <div key={it.id} className="flex items-center gap-2.5 rounded-lg bg-background p-2">
+                    {f.items.map((it, i) => (
+                      <div
+                        key={it.id}
+                        data-drag-index={i}
+                        data-drag-group={f.key ?? "sem-evento"}
+                        className={`flex items-center gap-2.5 rounded-lg border bg-background p-2 transition-colors ${
+                          dragOverride?.key === f.key && dragging === i
+                            ? "border-accent shadow-lg shadow-accent/20"
+                            : "border-transparent"
+                        }`}
+                      >
+                        <span
+                          onPointerDown={(e) => startDrag(e, i, f)}
+                          onPointerMove={move}
+                          onPointerUp={end}
+                          onPointerCancel={end}
+                          title="Arraste para reordenar"
+                          className="touch-none cursor-grab px-1 text-muted transition-colors hover:text-accent-2 active:cursor-grabbing"
+                        >
+                          <i className="fa-solid fa-grip-vertical" aria-hidden />
+                        </span>
+
                         {/* eslint-disable-next-line @next/next/no-img-element -- miniatura da API, sem otimização */}
                         <img src={it.image} alt="" className="h-11 w-16 shrink-0 rounded object-cover" />
 
