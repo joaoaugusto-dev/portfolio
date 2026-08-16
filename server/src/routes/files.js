@@ -119,7 +119,13 @@ router.get("/raw/:name", publicReadLimit, asyncRoute(async (req, res) => {
   res.set("Accept-Ranges", "bytes");
   if (obj.contentLength != null) res.set("Content-Length", obj.contentLength);
   if (executableInBrowser.test(type)) res.set("Content-Disposition", "attachment");
-  res.set("Cache-Control", "public, max-age=31536000, immutable");
+  // Com Range, NUNCA deixa o CDN (Vercel, na frente do rewrite /midia/.../arquivo)
+  // guardar a resposta: ele cacheia por URL, sem levar o Range em conta, então um
+  // pedido pelo início do vídeo podia receber de volta bytes cacheados de um
+  // pedido anterior por outro trecho — o vídeo simplesmente não tocava. Sem
+  // Range (arquivo inteiro, raro num <video>) não tem ambiguidade nenhuma, cache
+  // longo é seguro.
+  res.set("Cache-Control", range ? "private, no-store" : "public, max-age=31536000, immutable");
   if (range && obj.contentRange) {
     res.status(206);
     res.set("Content-Range", obj.contentRange);
