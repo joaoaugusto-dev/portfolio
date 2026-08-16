@@ -4,34 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import Reveal from "./Reveal";
 import { T, useLang } from "./I18n";
-import { sortGalleryByDate } from "@/lib/gallerySort";
-
-// Agrupa por corridas consecutivas do mesmo evento (nome + data) — o array já
-// chega ordenado por data (mais recente primeiro), então itens do mesmo
-// evento sempre ficam adjacentes. Fotos sem evento caem numa "seção" sem
-// título, iguais a antes dessa feature.
-function groupByEvent(items) {
-  const groups = [];
-  for (const it of items) {
-    const key = it.eventName ? `${it.eventName}|${it.eventDate || ""}` : null;
-    const last = groups[groups.length - 1];
-    if (last && last.key === key) last.items.push(it);
-    else groups.push({ key, eventName: it.eventName, eventDate: it.eventDate, items: [it] });
-  }
-  return groups;
-}
-
-// "YYYY-MM-DD" -> Date local, sem passar por UTC (evita cair no dia anterior
-// em fusos negativos, tipo Brasil).
-function formatEventDate(dateStr, lang) {
-  if (!dateStr) return "";
-  const [y, m, d] = dateStr.split("-").map(Number);
-  return new Intl.DateTimeFormat(lang === "en" ? "en-US" : "pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(y, m - 1, d));
-}
+import { sortGalleryByDate, groupByEvent, formatEventDate } from "@/lib/gallerySort";
 
 function Mosaic({ items, onZoom }) {
   // No máximo 2 colunas — agora que cada seção já é um evento (geralmente
@@ -101,7 +74,8 @@ export default function Gallery({ items = [] }) {
               {g.eventName && (
                 <Reveal>
                   <h3 className="mb-4 text-center text-lg font-semibold text-foreground">
-                    {g.eventName}
+                    {/* sem tradução cadastrada, o inglês cai no nome em PT */}
+                    <T pt={g.eventName} en={g.eventNameEn || g.eventName} />
                     {g.eventDate && (
                       <span className="ml-2 font-normal text-muted">— {formatEventDate(g.eventDate, lang)}</span>
                     )}
