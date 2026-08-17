@@ -236,7 +236,10 @@ export function Counter({ to, duration = 1400, suffix = "", className = "" }) {
   const ref = useRef(null);
   const inView = useInView(ref, { once: true, margin: "-60px" });
   const reduced = useReducedMotion();
-  const [n, setN] = useState(0);
+  // Começa no valor final, não em 0: o HTML do servidor é o que o Google lê, e
+  // com 0 ele indexava "0 Projetos no GitHub" / "0 Cursos e formações". A
+  // contagem continua igual — o rAF só assume quando a seção entra na tela.
+  const [n, setN] = useState(to);
 
   useEffect(() => {
     if (!inView || reduced) return;

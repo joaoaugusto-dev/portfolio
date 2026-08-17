@@ -103,11 +103,21 @@ export default function Hero({ texts }) {
         </div>
       </div>
 
+      {/* O <Letters> quebra o nome em um <span> por caractere e separa as palavras
+          com um span vazio — no HTML não sobra NENHUM espaço, então o Google lia
+          "JoãoAugustodeFreitas" e o h1 (o sinal on-page mais forte pra busca por
+          nome) não continha o nome. O nome real vai num sr-only, e as letras
+          decorativas ficam aria-hidden pra leitor de tela não ler duas vezes. */}
       <h1 className="mb-5 text-[2.6rem] font-bold leading-[1.05] tracking-tight sm:text-7xl">
-        <Letters text={nameLine1.pt} />
-        <br />
-        <span className="gradient-text">
-          <Letters text={nameLine2.pt} from={nameLine1.pt.length} />
+        <span className="sr-only">
+          {nameLine1.pt} {nameLine2.pt} — {tagline.pt}
+        </span>
+        <span aria-hidden>
+          <Letters text={nameLine1.pt} />
+          <br />
+          <span className="gradient-text">
+            <Letters text={nameLine2.pt} from={nameLine1.pt.length} />
+          </span>
         </span>
       </h1>
 

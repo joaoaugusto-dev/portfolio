@@ -8,11 +8,18 @@ import Fx from "@/components/Fx";
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
-const SITE = process.env.NEXT_PUBLIC_SITE_URL || "https://www.joaoaugusto.dev";
-const TITLE =
-  "João Augusto de Freitas | Desenvolvedor de Software Full-Stack em São João da Boa Vista";
+// Fixo, e com www: o apex responde 308 pro www, então quando isso vinha de
+// NEXT_PUBLIC_SITE_URL (que na Vercel estava no apex) o <link rel="canonical">
+// apontava pra uma URL que redireciona. Canonical que redireciona é sinal
+// conflitante — o Google tem que reconciliar sozinho qual versão indexar.
+// robots.txt, sitemap e llms.txt já usavam www; agora tudo fala a mesma coisa.
+const SITE = "https://www.joaoaugusto.dev";
+// Até ~60 caracteres: além disso o Google corta o título no resultado. O antigo
+// tinha 87 e virava "...Desenvolvedor de Software Full-Stack em São Joã...".
+const TITLE = "João Augusto de Freitas | Desenvolvedor Full-Stack";
+// Até ~160: o que passa disso o Google trunca com reticências no snippet.
 const DESC =
-  "Portfólio de João Augusto de Freitas, dev/desenvolvedor de software full-stack em São João da Boa Vista - SP, especializado em Flutter, Node.js, NestJS e ESP32/IoT. Formado pela ETEC de Vargem Grande do Sul, cursando Análise e Desenvolvimento de Sistemas na UNIFEOB. Confira projetos, habilidades e trajetória.";
+  "Portfólio de João Augusto de Freitas, desenvolvedor full-stack em São João da Boa Vista - SP. Projetos em Flutter, Node.js, NestJS e ESP32/IoT.";
 
 export const metadata = {
   metadataBase: new URL(SITE),
@@ -32,10 +39,12 @@ export const metadata = {
   authors: [{ name: "João Augusto de Freitas", url: SITE }],
   creator: "João Augusto de Freitas",
   robots: { index: true, follow: true },
-  alternates: {
-    canonical: "/",
-    languages: { "pt-BR": "/?lang=pt", en: "/?lang=en", "x-default": "/" },
-  },
+  // Só canonical, sem hreflang: o inglês é troca no cliente (ver I18nProvider),
+  // o servidor manda o MESMO HTML em PT pra /?lang=en. Declarar isso como versão
+  // "en" era hreflang falso, e fazia o Google indexar duas URLs com conteúdo
+  // idêntico competindo entre si. Com canonical "/" em todas, ?lang=pt e
+  // ?lang=en passam a consolidar a autoridade na home em vez de dividir.
+  alternates: { canonical: "/" },
   // Google prefers an icon >= 48px; o .ico só tem 16/32 e aparecia errado na busca.
   icons: {
     icon: [
