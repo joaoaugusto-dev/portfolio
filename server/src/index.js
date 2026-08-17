@@ -8,6 +8,11 @@ const coversRouter = require("./routes/covers");
 const coursesRouter = require("./routes/courses");
 const journeyRouter = require("./routes/journey");
 const galleryRouter = require("./routes/gallery");
+const socialLinksRouter = require("./routes/socialLinks");
+const skillsRouter = require("./routes/skills");
+const siteTextsRouter = require("./routes/siteTexts");
+const homeSectionsRouter = require("./routes/homeSections");
+const seed = require("./seed");
 
 const app = express();
 
@@ -44,6 +49,10 @@ app.use("/api/covers", coversRouter);
 app.use("/api/courses", coursesRouter);
 app.use("/api/journey", journeyRouter);
 app.use("/api/gallery", galleryRouter);
+app.use("/api/social-links", socialLinksRouter);
+app.use("/api/skills", skillsRouter);
+app.use("/api/site-texts", siteTextsRouter);
+app.use("/api/home-sections", homeSectionsRouter);
 
 // Rede de segurança: erro que escapou de um handler (asyncRoute captura a maioria,
 // mas isso cobre o resto) vira 500 pro cliente em vez de derrubar o processo.
@@ -55,6 +64,9 @@ app.use((err, req, res, next) => {
 
 const port = process.env.PORT || 4000;
 
-sequelize.sync().then(() => {
-  app.listen(port, () => console.log(`API listening on :${port}`));
-});
+sequelize
+  .sync()
+  .then(seed)
+  .then(() => {
+    app.listen(port, () => console.log(`API listening on :${port}`));
+  });

@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { getGallery, api, FRESH } from "@/lib/api";
 import { revalidateHome } from "@/lib/actions";
 import { sortGalleryByDate, groupByEvent, formatEventDate, eventKey } from "@/lib/gallerySort";
-import useDragReorder from "@/lib/useDragReorder";
 import { Spot, Toast, useToast } from "@/components/Fx";
 import ImageCropUpload from "@/components/admin/ImageCropUpload";
 import CropModal, { loadImage } from "@/components/admin/CropModal";
@@ -227,41 +226,53 @@ export default function GalleryAdmin({ token }) {
     }
   }
 
-  // ---------- arrastar pra reordenar dentro da pasta ----------
+  // ---------- setas pra reordenar dentro da pasta ----------
 
-  // { key, ids } com a ordem provisória enquanto arrasta — só existe durante o
-  // gesto, pra várias pastas abertas ao mesmo tempo não brigarem pelo mesmo
-  // estado. "group" no hook (a chave da pasta) impede o arraste de pular pra
-  // dentro de outra pasta.
-  const [dragOverride, setDragOverride] = useState(null);
-  const { dragging, start, move, end } = useDragReorder(
-    (updater) => setDragOverride((cur) => (cur ? { ...cur, ids: updater(cur.ids) } : cur)),
-    saveFolderOrder,
-  );
+  // { [chave-da-pasta]: ids[] } com a ordem provisória enquanto não salva —
+  // várias pastas abertas ao mesmo tempo, cada uma com sua própria mudança
+  // pendente. Só vira PUT quando clica em "Salvar ordem" daquela pasta.
+  const [pending, setPending] = useState({});
+  const [savingKey, setSavingKey] = useState(null);
 
-  function startDrag(e, i, f) {
-    setDragOverride({ key: f.key, ids: f.items.map((it) => it.id) });
-    start(e, i, f.key ?? "sem-evento");
+  function folderIds(f) {
+    return pending[f.key ?? "sem-evento"] || f.items.map((it) => it.id);
   }
 
-  async function saveFolderOrder() {
-    const ov = dragOverride;
-    setDragOverride(null);
-    if (!ov) return;
+  function moveItem(f, i, dir) {
+    const key = f.key ?? "sem-evento";
+    const ids = folderIds(f);
+    const to = i + dir;
+    if (to < 0 || to >= ids.length) return;
+    const next = [...ids];
+    next.splice(to, 0, ...next.splice(i, 1));
+    setPending((p) => ({ ...p, [key]: next }));
+  }
+
+  async function saveFolderOrder(f) {
+    const key = f.key ?? "sem-evento";
+    const ids = pending[key];
+    if (!ids) return;
+    setSavingKey(key);
     try {
-      setItems(await api.reorderGallery(token, ov.ids));
+      setItems(await api.reorderGallery(token, ids));
+      setPending((p) => {
+        const next = { ...p };
+        delete next[key];
+        return next;
+      });
       syncHome();
     } catch (err) {
       notify(err.message, "error");
       refresh();
+    } finally {
+      setSavingKey(null);
     }
   }
 
-  const folders = groupByEvent(sortGalleryByDate(items)).map((f) =>
-    dragOverride?.key === f.key
-      ? { ...f, items: dragOverride.ids.map((id) => f.items.find((it) => it.id === id)) }
-      : f,
-  );
+  const folders = groupByEvent(sortGalleryByDate(items)).map((f) => {
+    const key = f.key ?? "sem-evento";
+    return pending[key] ? { ...f, items: pending[key].map((id) => f.items.find((it) => it.id === id)) } : f;
+  });
   const destinos = folders.filter((f) => f.key);
   const enviando = progress !== null;
 
@@ -445,8 +456,8 @@ export default function GalleryAdmin({ token }) {
         </h2>
         <p className="-mt-2 text-xs text-muted">
           Cada pasta é um evento e vira uma seção na home, da data mais recente pra mais antiga. Fotos
-          sem evento ficam soltas no fim. Arraste pelo <i className="fa-solid fa-grip-vertical" aria-hidden />{" "}
-          para mudar a ordem das fotos dentro da pasta.
+          sem evento ficam soltas no fim. Use as setas para mudar a ordem das fotos dentro da pasta e
+          clique em &quot;Salvar ordem&quot; para aplicar.
         </p>
 
         {loading && [0, 1].map((i) => <div key={i} className="h-24 animate-pulse rounded-xl bg-surface/70" />)}
@@ -482,6 +493,23 @@ export default function GalleryAdmin({ token }) {
                     {f.eventNameEn ? ` · EN: ${f.eventNameEn}` : ""}
                   </p>
                 </div>
+                <AnimatePresence>
+                  {pending[f.key ?? "sem-evento"] && (
+                    <motion.button
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      onClick={() => saveFolderOrder(f)}
+                      disabled={savingKey === (f.key ?? "sem-evento")}
+                      className="btn btn-primary sheen shrink-0 px-3 py-1.5 text-xs disabled:opacity-50"
+                    >
+                      {savingKey === (f.key ?? "sem-evento") && (
+                        <i className="fa-solid fa-circle-notch fa-spin" aria-hidden />
+                      )}
+                      {savingKey === (f.key ?? "sem-evento") ? "Salvando..." : "Salvar ordem"}
+                    </motion.button>
+                  )}
+                </AnimatePresence>
                 {f.key && (
                   <button
                     onClick={() => setRenaming({ key: f.key, ...eventOf(f) })}
@@ -504,26 +532,33 @@ export default function GalleryAdmin({ token }) {
                 >
                   <div className="space-y-2 p-3">
                     {f.items.map((it, i) => (
-                      <div
+                      <motion.div
                         key={it.id}
-                        data-drag-index={i}
-                        data-drag-group={f.key ?? "sem-evento"}
-                        className={`flex items-center gap-2.5 rounded-lg border bg-background p-2 transition-colors ${
-                          dragOverride?.key === f.key && dragging === i
-                            ? "border-accent shadow-lg shadow-accent/20"
-                            : "border-transparent"
-                        }`}
+                        layout
+                        className="flex items-center gap-2.5 rounded-lg border border-transparent bg-background p-2"
                       >
-                        <span
-                          onPointerDown={(e) => startDrag(e, i, f)}
-                          onPointerMove={move}
-                          onPointerUp={end}
-                          onPointerCancel={end}
-                          title="Arraste para reordenar"
-                          className="touch-none cursor-grab px-1 text-muted transition-colors hover:text-accent-2 active:cursor-grabbing"
-                        >
-                          <i className="fa-solid fa-grip-vertical" aria-hidden />
-                        </span>
+                        <div className="flex shrink-0 flex-col gap-0.5">
+                          <motion.button
+                            type="button"
+                            whileTap={{ y: -2 }}
+                            onClick={() => moveItem(f, i, -1)}
+                            disabled={i === 0}
+                            aria-label="Mover para cima"
+                            className="flex h-5 w-7 items-center justify-center rounded border border-white/10 text-[10px] text-muted transition-colors hover:border-accent hover:text-accent-2 disabled:pointer-events-none disabled:opacity-30"
+                          >
+                            <i className="fa-solid fa-chevron-up" aria-hidden />
+                          </motion.button>
+                          <motion.button
+                            type="button"
+                            whileTap={{ y: 2 }}
+                            onClick={() => moveItem(f, i, 1)}
+                            disabled={i === f.items.length - 1}
+                            aria-label="Mover para baixo"
+                            className="flex h-5 w-7 items-center justify-center rounded border border-white/10 text-[10px] text-muted transition-colors hover:border-accent hover:text-accent-2 disabled:pointer-events-none disabled:opacity-30"
+                          >
+                            <i className="fa-solid fa-chevron-down" aria-hidden />
+                          </motion.button>
+                        </div>
 
                         {/* eslint-disable-next-line @next/next/no-img-element -- miniatura da API, sem otimização */}
                         <img src={it.image} alt="" className="h-11 w-16 shrink-0 rounded object-cover" />
@@ -564,7 +599,7 @@ export default function GalleryAdmin({ token }) {
                             <i className="fa-solid fa-trash" aria-hidden />
                           </button>
                         </div>
-                      </div>
+                      </motion.div>
                     ))}
                   </div>
                 </motion.div>

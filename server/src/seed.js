@@ -1,131 +1,91 @@
-require("dotenv").config();
-const sequelize = require("./db");
-const Project = require("./models/Project");
+const SocialLink = require("./models/SocialLink");
+const Skill = require("./models/Skill");
+const SiteText = require("./models/SiteText");
+const HomeSection = require("./models/HomeSection");
 
-// Extracted from the original static index.html project cards.
-const projects = [
-  {
-    title: "Sidera Predict",
-    imageUrl: "/images/SideraPredict.webp",
-    link: "https://github.com/joaoaugusto-dev/pi-2026.1",
-    featured: true,
-    projectDate: "2026-05-31",
-    order: 0,
-    description:
-      "🏢 <strong>Empresa Parceira:</strong> Soufer<br><br>💡 <strong>Objetivo:</strong> Validar peças metálicas no chão de fábrica com inspeção dimensional assistida, rastreabilidade e relatórios automatizados.<br><br>📋 <strong>Descrição:</strong> Aplicativo Flutter para inspeção dimensional assistida, que usa visão computacional e marcadores físicos para comparar medidas, registrar evidências e apoiar a tomada de decisão na produção.<br><br>🛠️ <strong>Tecnologias:</strong> Flutter, Dart, visão computacional, Supabase<br><br>📅 <strong>Período Trabalhado:</strong> Fevereiro/2026 - Maio/2026.",
-  },
-  {
-    title: "Automação IoT UNIFEOB-PackBag",
-    imageUrl: "/images/pi-2025-1.webp",
-    link: "https://github.com/joaoaugusto-dev/projeto-pi",
-    featured: true,
-    projectDate: "2025-06-01",
-    order: 1,
-    description:
-      "💡 <strong>Objetivo:</strong> Otimizar energia com climatização e iluminação inteligentes por detecção de presença em ambiente fabril.<br><br>📋 <strong>Descrição:</strong> Sistema IoT com leitura em tempo real de temperatura, umidade, luminosidade e presença, acionando automaticamente luzes e climatizadores. Inclui RFID/NFC para autenticação e dashboard (IHM) acessível via web.<br><br>🛠️ <strong>Tecnologias:</strong> ESP32 (C++/Wi-Fi), DHT22, LDR, IR, RFID/NFC, Node.js, JavaScript, EJS, HTML5, CSS3, Bootstrap, Figma, Relés.<br><br>🤝 <strong>Parceria:</strong> Projeto realizado com apoio da PackBag no contexto do PI UNIFEOB.<br><br>📅 <strong>Período Trabalhado:</strong> Fevereiro/2025 a Junho/2025.",
-  },
-  {
-    title: "Bolso Inteligente",
-    imageUrl: "/images/paginainicialbolsointeligente.webp",
-    link: "https://bolsointeligente.netlify.app/",
-    featured: true,
-    projectDate: "2024-12-01",
-    order: 2,
-    description:
-      "💡 <strong>Desafio:</strong> 79% das famílias brasileiras estavam endividadas em 2023.<br><br>✅ <strong>Solução:</strong> Plataforma web para cadastro de despesas, receitas e metas. Relatórios visuais (Chart.js), lembretes automáticos, acessibilidade (VLibras) e assistente com IA Gemini.<br><br>🛠️ <strong>Tecnologias:</strong> HTML5, CSS3, JavaScript, Node.js, MySQL e Bootstrap.<br><br>📅 <strong>Período Trabalhado:</strong> Outubro/2023 a Dezembro/2024.",
-  },
-  {
-    title: "Amendoeira",
-    imageUrl: "/images/siteamendoeira.webp",
-    link: "https://amendoeiraoficial.netlify.app",
-    featured: false,
-    projectDate: "2023-09-01",
-    order: 3,
-    description:
-      "💡 <strong>Objetivo:</strong> Desenvolver meu primeiro projeto pessoal para aprimorar habilidades em HTML, CSS e Bootstrap, criando um site responsivo para auxiliar no planejamento da loja que minha mãe pretendia lançar.<br><br>📋 <strong>Descrição:</strong> Site intuitivo e visualmente atrativo, com design responsivo e boa organização de layout.<br><br>📅 <strong>Período Trabalhado:</strong> Setembro/2023<br><br>🛠️ <strong>Tecnologias:</strong> HTML5, CSS3, Bootstrap",
-  },
-  {
-    title: "ArtEmotion",
-    imageUrl: "/images/artemotion.webp",
-    link: "https://artemotion.netlify.app/",
-    featured: false,
-    projectDate: "2023-08-01",
-    order: 4,
-    description:
-      "💡 <strong>Objetivo:</strong> Refinar habilidades em organização de layouts com Bootstrap e integração com o Pixabay.<br><br>📋 <strong>Descrição:</strong> Aplicação web que simula uma galeria de arte digital.<br><br>📅 <strong>Período Trabalhado:</strong> Agosto/2023.<br><br>🛠️ <strong>Tecnologias:</strong> HTML5, CSS3, Bootstrap, Pixabay.",
-  },
-  {
-    title: "Capivara nas Alturas",
-    imageUrl: "/images/capivaranasalturas.webp",
-    link: "https://capivaranasalturas.netlify.app/",
-    featured: false,
-    projectDate: "2023-09-01",
-    order: 5,
-    description:
-      "💡 <strong>Objetivo:</strong> Aprimorar habilidades em JavaScript, com ênfase no uso do Método DOM.<br><br>📋 <strong>Descrição:</strong> Jogo inspirado no 'Flappy Bird', com temática de capivaras.<br><br>📅 <strong>Período Trabalhado:</strong> Setembro/2023.<br><br>🛠️ <strong>Tecnologias:</strong> JavaScript, HTML5, CSS3, Bootstrap.",
-  },
-  {
-    title: "Craft Server",
-    imageUrl: "/images/paginainicialcraftserver.webp",
-    link: "https://craftserver.netlify.app/",
-    featured: false,
-    projectDate: "2023-11-01",
-    order: 6,
-    description:
-      "💡 <strong>Objetivo:</strong> Desenvolver e aprimorar habilidades em planejamento de páginas, front-end e uso do Bootstrap.<br><br>📋 <strong>Descrição:</strong> Página fictícia que simula o site de uma empresa de hospedagem de servidores.<br><br>📅 <strong>Período Trabalhado:</strong> Novembro/2023.<br><br>🛠️ <strong>Tecnologias:</strong> HTML5, CSS3, JavaScript, Bootstrap.",
-  },
-  {
-    title: "Etec Life",
-    imageUrl: "/images/siteeteclife.webp",
-    link: "https://eteclife.netlify.app/",
-    featured: false,
-    projectDate: "2023-07-01",
-    order: 7,
-    description:
-      "💡 <strong>Objetivo:</strong> Desenvolver uma plataforma para gestão de atividades escolares.<br><br>📋 <strong>Descrição:</strong> Aplicação web que permite aos alunos e professores gerenciar tarefas, eventos e comunicados escolares.<br><br>📅 <strong>Período Trabalhado:</strong> Julho/2023.<br><br>🛠️ <strong>Tecnologias:</strong> HTML5, CSS3, JavaScript e Bootstrap",
-  },
-  {
-    title: "Mata Mosquito",
-    imageUrl: "/images/sitematamosquito.webp",
-    link: "https://mata-mosquito-jogu.netlify.app/",
-    featured: false,
-    projectDate: "2023-06-01",
-    order: 8,
-    description:
-      "💡 <strong>Objetivo:</strong> Criar um jogo educativo para conscientização sobre a dengue.<br><br>📋 <strong>Descrição:</strong> Jogo interativo onde os jogadores devem eliminar focos de mosquito e aprender sobre prevenção.<br><br>📅 <strong>Período Trabalhado:</strong> Junho/2023.<br><br>🛠️ <strong>Tecnologias:</strong> HTML5, CSS3, JavaScript e Bootstrap.",
-  },
-  {
-    title: "Google Glass",
-    imageUrl: "/images/sitegoogleglass.webp",
-    link: "https://google-glass-guanabara.netlify.app/",
-    featured: false,
-    projectDate: "2023-02-01",
-    order: 9,
-    description:
-      "💡 <strong>Objetivo:</strong> Explorar as funcionalidades do Google Glass em um projeto prático.<br><br>📋 <strong>Descrição:</strong> Aplicação que demonstra o uso do Google Glass em diferentes cenários. Desenvolvido no Curso de HTML5 do Curso em Vídeo.<br><br>📅 <strong>Período Trabalhado:</strong> Fevereiro/2023.<br><br>🛠️ <strong>Tecnologias:</strong> HTML5, CSS3, JavaScript.",
-  },
-  {
-    title: "Culinária sem Barreiras",
-    imageUrl: "/images/paginainicialculinaria.webp",
-    link: "https://culinariasembarreiras.netlify.app/",
-    featured: false,
-    projectDate: "2024-11-01",
-    order: 10,
-    description:
-      "💡 <strong>Objetivo:</strong> Aprimorar conhecimentos e práticas em acessibilidade na web.<br><br>📋 <strong>Descrição:</strong> Aplicação web que apresenta receitas, dicas e recursos para tornar a cozinha mais acessível e inclusiva.<br><br>📅 <strong>Período Trabalhado:</strong> Novembro/2024.<br><br>🛠️ <strong>Tecnologias:</strong> HTML5, CSS3, JavaScript, Bootstrap e VLibras.",
-  },
+// Conteúdo que virou editável no admin, populado uma vez só (por tabela vazia)
+// com o que já estava hardcoded nos componentes antes dessa migração — assim
+// o site não muda de aparência no primeiro boot com as tabelas novas.
+
+const socialLinks = [
+  { label: "Email", href: "mailto:contato@joaoaugusto.dev", icon: "fa-solid fa-envelope", order: 0 },
+  { label: "WhatsApp", href: "https://api.whatsapp.com/send?phone=5519994943031", icon: "fa-brands fa-whatsapp", order: 1 },
+  { label: "GitHub", href: "https://github.com/joaoaugusto-dev", icon: "fa-brands fa-github", order: 2 },
+  { label: "LinkedIn", href: "https://www.linkedin.com/in/jo%C3%A3o-augusto-de-freitas/", icon: "fa-brands fa-linkedin", order: 3 },
+  { label: "Instagram", href: "https://www.instagram.com/joao_augusto.dev", icon: "fa-brands fa-instagram", order: 4 },
 ];
 
-async function run() {
-  await sequelize.sync();
-  const count = await Project.count();
-  if (count > 0) {
-    console.log(`Projects table already has ${count} rows — skipping seed.`);
-    return process.exit(0);
-  }
-  await Project.bulkCreate(projects);
-  console.log(`Seeded ${projects.length} projects.`);
-  process.exit(0);
+const skills = [
+  { type: "tech", icon: "fab fa-flutter", name: "Flutter", cat: "mobile", pt: "apps Android e iOS", en: "Android & iOS apps", order: 0 },
+  { type: "tech", icon: "fab fa-dart-lang", name: "Dart", cat: "mobile", pt: "a linguagem do Flutter", en: "the Flutter language", order: 1 },
+  { type: "tech", icon: "fab fa-js-square", name: "JavaScript", cat: "front", pt: "web de ponta a ponta", en: "end-to-end web", order: 2 },
+  { type: "tech", icon: "fab fa-html5", name: "HTML5", cat: "front", pt: "estrutura semântica", en: "semantic structure", order: 3 },
+  { type: "tech", icon: "fab fa-css3-alt", name: "CSS3", cat: "front", pt: "layout e animação", en: "layout & animation", order: 4 },
+  { type: "tech", icon: "fab fa-bootstrap", name: "Bootstrap", cat: "front", pt: "protótipo em pé rápido", en: "quick prototypes", order: 5 },
+  { type: "tech", icon: "fab fa-figma", name: "Figma", cat: "front", pt: "desenho das telas", en: "screen design", order: 6 },
+  { type: "tech", icon: "fab fa-node-js", name: "Node.js", cat: "back", pt: "APIs e serviços", en: "APIs & services", order: 7 },
+  { type: "tech", icon: "fa-solid fa-server", name: "NestJS", cat: "back", pt: "back-end organizado", en: "structured back-end", order: 8 },
+  { type: "tech", icon: "fab fa-linux", name: "Linux", cat: "back", pt: "onde tudo roda", en: "where it all runs", order: 9 },
+  { type: "tech", icon: "fa-solid fa-database", name: "Supabase", cat: "dados", pt: "banco, auth e storage", en: "database, auth & storage", order: 10 },
+  { type: "tech", icon: "fa-solid fa-fire", name: "Firebase", cat: "dados", pt: "tempo real e auth", en: "realtime & auth", order: 11 },
+  { type: "tech", icon: "fas fa-database", name: "MySQL", cat: "dados", pt: "modelagem relacional", en: "relational modeling", order: 12 },
+  { type: "tech", icon: "fa-solid fa-microchip", name: "ESP32", cat: "hard", pt: "IoT e hardware conectado", en: "IoT & connected hardware", order: 13 },
+  { type: "soft", icon: "fas fa-users", pt: "Trabalho em Grupo", en: "Teamwork", order: 0 },
+  { type: "soft", icon: "fas fa-laptop-code", pt: "Desenvolvimento de Sistemas", en: "Systems Development", order: 1 },
+  { type: "soft", icon: "fas fa-tasks", pt: "Gestão de Projetos", en: "Project Management", order: 2 },
+  { type: "soft", icon: "fas fa-microchip", pt: "Tecnologias Emergentes", en: "Emerging Technologies", order: 3 },
+  { type: "soft", icon: "fas fa-chart-line", pt: "Análise de Dados", en: "Data Analysis", order: 4 },
+  { type: "soft", icon: "fas fa-people-arrows", pt: "Trabalho Multidisciplinar", en: "Multidisciplinary Work", order: 5 },
+  { type: "soft", icon: "fas fa-lightbulb", pt: "Inovação", en: "Innovation", order: 6 },
+  { type: "soft", icon: "fas fa-puzzle-piece", pt: "Resolução de Problemas", en: "Problem Solving", order: 7 },
+];
+
+const siteTexts = [
+  { key: "hero.nameLine1", group: "hero", label: "Nome — primeira linha", pt: "João Augusto", en: "João Augusto", order: 0 },
+  { key: "hero.nameLine2", group: "hero", label: "Nome — segunda linha", pt: "de Freitas", en: "de Freitas", order: 1 },
+  { key: "hero.tagline", group: "hero", label: "Frase abaixo do nome", pt: "Desenvolvedor de Software em São João da Boa Vista - SP", en: "Software Developer based in São João da Boa Vista, Brazil", order: 2 },
+  { key: "hero.buildingWith", group: "hero", label: "Frase antes da tecnologia rotativa", pt: "construindo com", en: "building with", order: 3 },
+  { key: "hero.stack", group: "hero", label: "Tecnologias da lista rotativa (separadas por vírgula)", pt: "Flutter, Node.js, NestJS, ESP32, Supabase", en: "Flutter, Node.js, NestJS, ESP32, Supabase", order: 4 },
+  { key: "hero.ctaProjects", group: "hero", label: "Botão: ver projetos", pt: "Ver Projetos", en: "View Projects", order: 5 },
+  { key: "hero.ctaContact", group: "hero", label: "Botão: ir para contato", pt: "Vamos Conversar", en: "Let's Talk", order: 6 },
+
+  { key: "about.name", group: "about", label: "Nome exibido no card Sobre Mim", pt: "João Augusto de Freitas", en: "João Augusto de Freitas", order: 0 },
+  { key: "about.roleTagline", group: "about", label: "Frase abaixo do nome no card", pt: "Desenvolvedor de software em São João da Boa Vista - SP", en: "Software developer based in São João da Boa Vista, Brazil", order: 1 },
+  { key: "about.bullets", group: "about", label: "Formação (uma linha por item)", pt: "Estudante de Análise e Desenvolvimento de Sistemas na UNIFEOB (previsão de conclusão 2027).\nEnsino Médio com Curso Técnico em Informática para Internet na ETEC de Vargem Grande do Sul — concluído em 2024.", en: "Systems Analysis and Development student at UNIFEOB (expected graduation 2027).\nHigh School with Technical Course in Internet Informatics at ETEC de Vargem Grande do Sul — completed in 2024.", order: 2 },
+  { key: "about.devSince", group: "about", label: "Data de início como dev (AAAA-MM-DD) — usada pra calcular 'anos de experiência'", pt: "2022-02-01", en: "2022-02-01", order: 3 },
+  { key: "about.statGithubLabel", group: "about", label: "Legenda do card: projetos no GitHub", pt: "Projetos no GitHub", en: "GitHub projects", order: 4 },
+  { key: "about.statYearsLabel", group: "about", label: "Legenda do card: anos de experiência", pt: "Anos de experiência", en: "Years of experience", order: 5 },
+  { key: "about.statCoursesLabel", group: "about", label: "Legenda do card: cursos e formações", pt: "Cursos e formações", en: "Courses & education", order: 6 },
+  { key: "about.contactsHeading", group: "about", label: "Título acima das redes sociais", pt: "Contatos", en: "Contacts", order: 7 },
+
+  { key: "contact.heading", group: "contact", label: "Título da seção de contato", pt: "Vamos Conversar?", en: "Let's Talk?", order: 0 },
+  { key: "contact.whatsappCta", group: "contact", label: "Botão do WhatsApp", pt: "Chamar no WhatsApp", en: "Message on WhatsApp", order: 1 },
+  { key: "contact.emailCopied", group: "contact", label: "Mensagem ao copiar o e-mail", pt: "E-mail copiado!", en: "E-mail copied!", order: 2 },
+  { key: "contact.findMe", group: "contact", label: "Frase acima das redes sociais", pt: "Ou me encontre em:", en: "Or find me at:", order: 3 },
+
+  { key: "footer.name", group: "footer", label: "Nome no copyright", pt: "João Augusto de Freitas", en: "João Augusto de Freitas", order: 0 },
+  { key: "footer.rights", group: "footer", label: "Texto de direitos reservados", pt: "Todos os direitos reservados.", en: "All rights reserved.", order: 1 },
+
+  { key: "nav.wordmark", group: "nav", label: 'Nome no topo do menu (antes de ".dev")', pt: "JOÃO AUGUSTO", en: "JOÃO AUGUSTO", order: 0 },
+];
+
+const homeSections = [
+  { key: "about", order: 0, visible: true },
+  { key: "gallery", order: 1, visible: true },
+  { key: "skills", order: 2, visible: true },
+  { key: "projects", order: 3, visible: true },
+  { key: "journey", order: 4, visible: true },
+  { key: "courses", order: 5, visible: true },
+  { key: "contact", order: 6, visible: true },
+];
+
+// Idempotente: só popula uma tabela se ela estiver vazia, então é seguro
+// rodar em todo boot (sem precisar de uma ferramenta de migration separada).
+async function seed() {
+  if (!(await SocialLink.count())) await SocialLink.bulkCreate(socialLinks);
+  if (!(await Skill.count())) await Skill.bulkCreate(skills);
+  if (!(await SiteText.count())) await SiteText.bulkCreate(siteTexts);
+  if (!(await HomeSection.count())) await HomeSection.bulkCreate(homeSections);
 }
 
-run();
+module.exports = seed;

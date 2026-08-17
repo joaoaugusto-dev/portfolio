@@ -6,44 +6,67 @@ import Reveal from "./Reveal";
 import { T, useLang } from "./I18n";
 import { sortGalleryByDate, groupByEvent, formatEventDate } from "@/lib/gallerySort";
 
+function chunk(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
 function Mosaic({ items, onZoom }) {
   // No máximo 2 colunas — agora que cada seção já é um evento (geralmente
-  // poucas fotos), 3 colunas ficava largo demais. Colunas nativas do CSS
-  // sempre reservam N trilhas, mesmo com poucas fotos — sem isso, 1 foto
-  // ficaria grudada na esquerda em vez de centralizada.
+  // poucas fotos), 3 colunas ficava largo demais.
+  //
+  // Layout "justificado" (tipo Flickr/Google Fotos) em vez de grid com caixa
+  // fixa: cada linha tem sua própria altura, calculada pra soma das larguras
+  // das fotos (na proporção real de cada uma) preencher exatamente a largura
+  // da linha. `flex-grow` proporcional à proporção de cada foto faz a
+  // distribuição; `aspect-ratio` na linha (soma das proporções) faz a altura
+  // bater certinho — então a caixa de cada foto fica com a MESMA proporção da
+  // foto, sem sobrar vão (grid comum) nem cortar além do que já foi definido
+  // no recorte do admin (`object-cover`, que corta pra preencher). A ordem
+  // continua estritamente a da lista: linha por linha, esquerda pra direita.
   const cols = Math.min(items.length, 2);
-  const colsClass = cols === 2 ? "columns-2" : "columns-1";
   const maxWidth = cols === 2 ? "max-w-2xl" : "max-w-sm";
+  const rows = chunk(items, cols);
 
   return (
-    <div className={`mx-auto ${colsClass} ${maxWidth} gap-3 sm:gap-4`}>
-      {items.map((it, i) => (
-        <Reveal key={it.id} delay={Math.min(i, 6) * 0.06} className="mb-3 break-inside-avoid sm:mb-4">
-          <button
-            type="button"
-            onClick={() => onZoom(it)}
-            aria-label="Ampliar imagem"
-            className="group relative block w-full cursor-zoom-in overflow-hidden rounded-xl border border-white/5"
-            style={{ aspectRatio: it.width && it.height ? `${it.width} / ${it.height}` : "4 / 3" }}
-          >
-            <Image
-              src={it.image}
-              alt={it.captionPt || ""}
-              fill
-              sizes="(max-width: 640px) 50vw, 25vw"
-              className="object-cover transition-transform duration-700 ease-out group-hover:scale-105"
-            />
-            {(it.captionPt || it.captionEn) && (
-              <>
-                <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/80 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                <span className="pointer-events-none absolute inset-x-3 bottom-3 translate-y-1 text-left text-sm text-foreground opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
-                  <T pt={it.captionPt} en={it.captionEn} />
-                </span>
-              </>
-            )}
-          </button>
-        </Reveal>
-      ))}
+    <div className={`mx-auto ${maxWidth} space-y-3 sm:space-y-4`}>
+      {rows.map((row, ri) => {
+        const ars = row.map((it) => (it.width && it.height ? it.width / it.height : 4 / 3));
+        const sumAr = ars.reduce((a, b) => a + b, 0);
+        return (
+          <div key={row[0].id} className="flex gap-3 sm:gap-4" style={{ aspectRatio: sumAr }}>
+            {row.map((it, i) => (
+              <div key={it.id} className="min-w-0" style={{ flexGrow: ars[i], flexBasis: 0 }}>
+                <Reveal delay={Math.min(ri * cols + i, 6) * 0.06} className="h-full">
+                  <button
+                    type="button"
+                    onClick={() => onZoom(it)}
+                    aria-label="Ampliar imagem"
+                    className="group relative block h-full w-full cursor-zoom-in overflow-hidden rounded-xl border border-white/5"
+                  >
+                    <Image
+                      src={it.image}
+                      alt={it.captionPt || ""}
+                      fill
+                      sizes="(max-width: 640px) 50vw, 25vw"
+                      className="object-contain transition-transform duration-700 ease-out group-hover:scale-105"
+                    />
+                    {(it.captionPt || it.captionEn) && (
+                      <>
+                        <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/80 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                        <span className="pointer-events-none absolute inset-x-3 bottom-3 translate-y-1 text-left text-sm text-foreground opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
+                          <T pt={it.captionPt} en={it.captionEn} />
+                        </span>
+                      </>
+                    )}
+                  </button>
+                </Reveal>
+              </div>
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -65,9 +88,6 @@ export default function Gallery({ items = [] }) {
           </h2>
         </Reveal>
 
-        {/* Colunas nativas do CSS: cada foto entra na ordem, o navegador vai
-            preenchendo a coluna mais curta primeiro — mosaico tipo Pinterest,
-            sem grid fixo nem corte forçado, usando a proporção real de cada foto. */}
         <div className="space-y-10">
           {groups.map((g, gi) => (
             <div key={g.key || `sem-evento-${gi}`}>

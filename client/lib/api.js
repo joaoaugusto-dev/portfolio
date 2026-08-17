@@ -45,6 +45,30 @@ export async function getGallery(opts = CACHED) {
   return res.json();
 }
 
+export async function getSocialLinks(opts = CACHED) {
+  const res = await fetch(`${API_URL}/api/social-links`, opts);
+  if (!res.ok) throw new Error("Failed to load social links");
+  return res.json();
+}
+
+export async function getSkills(opts = CACHED) {
+  const res = await fetch(`${API_URL}/api/skills`, opts);
+  if (!res.ok) throw new Error("Failed to load skills");
+  return res.json();
+}
+
+export async function getSiteTexts(opts = CACHED) {
+  const res = await fetch(`${API_URL}/api/site-texts`, opts);
+  if (!res.ok) throw new Error("Failed to load site texts");
+  return res.json();
+}
+
+export async function getHomeSections(opts = CACHED) {
+  const res = await fetch(`${API_URL}/api/home-sections`, opts);
+  if (!res.ok) throw new Error("Failed to load home sections");
+  return res.json();
+}
+
 export async function getGithubStats(username = "joaoaugusto-dev") {
   const res = await fetch(`https://api.github.com/users/${username}`, { next: { revalidate: 3600 } });
   if (!res.ok) throw new Error("Failed to load GitHub stats");
@@ -102,6 +126,35 @@ export const api = {
     authedFetch(`/api/gallery/${id}`, token, { method: "DELETE" }),
   reorderGallery: (token, ids) =>
     authedFetch("/api/gallery/reorder", token, { method: "PUT", body: JSON.stringify({ ids }) }),
+  createSocialLink: (token, data) =>
+    authedFetch("/api/social-links", token, { method: "POST", body: JSON.stringify(data) }),
+  updateSocialLink: (token, id, data) =>
+    authedFetch(`/api/social-links/${id}`, token, { method: "PUT", body: JSON.stringify(data) }),
+  deleteSocialLink: (token, id) =>
+    authedFetch(`/api/social-links/${id}`, token, { method: "DELETE" }),
+  reorderSocialLinks: (token, ids) =>
+    authedFetch("/api/social-links/reorder", token, { method: "PUT", body: JSON.stringify({ ids }) }),
+  createSkill: (token, data) =>
+    authedFetch("/api/skills", token, { method: "POST", body: JSON.stringify(data) }),
+  updateSkill: (token, id, data) =>
+    authedFetch(`/api/skills/${id}`, token, { method: "PUT", body: JSON.stringify(data) }),
+  deleteSkill: (token, id) =>
+    authedFetch(`/api/skills/${id}`, token, { method: "DELETE" }),
+  reorderSkills: (token, ids) =>
+    authedFetch("/api/skills/reorder", token, { method: "PUT", body: JSON.stringify({ ids }) }),
+  createSiteText: (token, data) =>
+    authedFetch("/api/site-texts", token, { method: "POST", body: JSON.stringify(data) }),
+  updateSiteText: (token, id, data) =>
+    authedFetch(`/api/site-texts/${id}`, token, { method: "PUT", body: JSON.stringify(data) }),
+  deleteSiteText: (token, id) =>
+    authedFetch(`/api/site-texts/${id}`, token, { method: "DELETE" }),
+  reorderHomeSections: (token, keys) =>
+    authedFetch("/api/home-sections/reorder", token, { method: "PUT", body: JSON.stringify({ keys }) }),
+  setHomeSectionVisible: (token, key, visible) =>
+    authedFetch(`/api/home-sections/${encodeURIComponent(key)}/visible`, token, {
+      method: "PUT",
+      body: JSON.stringify({ visible }),
+    }),
   uploadCover: (token, file) => {
     const form = new FormData();
     form.append("file", file);

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getJourney, api, FRESH } from "@/lib/api";
 import { revalidateHome } from "@/lib/actions";
-import useDragReorder from "@/lib/useDragReorder";
+import useReorder from "@/lib/useReorder";
 import { Spot, Toast, useToast } from "@/components/Fx";
 import IconPicker from "./IconPicker";
 
@@ -38,7 +38,7 @@ export default function JourneyAdmin({ token }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, notify] = useToast();
-  const { dragging, start, move, end } = useDragReorder(setItems, saveOrder);
+  const { dirty, saving: reordering, moveUp, moveDown, save: saveOrder } = useReorder(items, setItems, persistOrder);
 
   async function refresh() {
     setLoading(true);
@@ -52,7 +52,7 @@ export default function JourneyAdmin({ token }) {
     }
   }
 
-  async function saveOrder() {
+  async function persistOrder() {
     try {
       setItems(await api.reorderJourneyItems(token, items.map((i) => i.id)));
       notify("Ordem salva");
@@ -274,12 +274,28 @@ export default function JourneyAdmin({ token }) {
       </Spot>
 
       <div className="space-y-3">
-        <h2 className="text-lg font-semibold">
-          Jornada <span className="text-muted">({items.length})</span>
-        </h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">
+            Jornada <span className="text-muted">({items.length})</span>
+          </h2>
+          <AnimatePresence>
+            {dirty && (
+              <motion.button
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                onClick={saveOrder}
+                disabled={reordering}
+                className="btn btn-primary sheen shrink-0 px-3 py-1.5 text-xs disabled:opacity-50"
+              >
+                {reordering && <i className="fa-solid fa-circle-notch fa-spin" aria-hidden />}
+                {reordering ? "Salvando..." : "Salvar ordem"}
+              </motion.button>
+            )}
+          </AnimatePresence>
+        </div>
         <p className="-mt-1 text-xs text-muted">
-          Arraste pelo <i className="fa-solid fa-grip-vertical" aria-hidden /> para mudar a ordem
-          cronológica exibida no site.
+          Use as setas para mudar a ordem cronológica exibida no site.
         </p>
 
         {loading &&
@@ -289,26 +305,35 @@ export default function JourneyAdmin({ token }) {
           {items.map((item, i) => (
             <motion.div
               key={item.id}
-              layout={dragging === null}
+              layout
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97 }}
               transition={{ type: "spring", stiffness: 400, damping: 36 }}
-              data-drag-index={i}
-              className={`flex items-center gap-3 rounded-xl border bg-surface p-2.5 transition-colors ${
-                dragging === i ? "border-accent shadow-lg shadow-accent/20" : "border-white/5"
-              }`}
+              className="flex items-center gap-3 rounded-xl border border-white/5 bg-surface p-2.5"
             >
-              <span
-                onPointerDown={(e) => start(e, i)}
-                onPointerMove={move}
-                onPointerUp={end}
-                onPointerCancel={end}
-                title="Arraste para reordenar"
-                className="touch-none cursor-grab px-1 text-muted transition-colors hover:text-accent-2 active:cursor-grabbing"
-              >
-                <i className="fa-solid fa-grip-vertical" aria-hidden />
-              </span>
+              <div className="flex shrink-0 flex-col gap-0.5">
+                <motion.button
+                  type="button"
+                  whileTap={{ y: -2 }}
+                  onClick={() => moveUp(i)}
+                  disabled={i === 0}
+                  aria-label="Mover para cima"
+                  className="flex h-5 w-7 items-center justify-center rounded border border-white/10 text-[10px] text-muted transition-colors hover:border-accent hover:text-accent-2 disabled:pointer-events-none disabled:opacity-30"
+                >
+                  <i className="fa-solid fa-chevron-up" aria-hidden />
+                </motion.button>
+                <motion.button
+                  type="button"
+                  whileTap={{ y: 2 }}
+                  onClick={() => moveDown(i)}
+                  disabled={i === items.length - 1}
+                  aria-label="Mover para baixo"
+                  className="flex h-5 w-7 items-center justify-center rounded border border-white/10 text-[10px] text-muted transition-colors hover:border-accent hover:text-accent-2 disabled:pointer-events-none disabled:opacity-30"
+                >
+                  <i className="fa-solid fa-chevron-down" aria-hidden />
+                </motion.button>
+              </div>
 
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-background text-accent-2">
                 <i className={item.icon} aria-hidden />

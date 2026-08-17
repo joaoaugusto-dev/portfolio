@@ -1,0 +1,38 @@
+// Ícones curados pra habilidades técnicas: logos de marca (fa-brands) +
+// alguns fa-solid genéricos (backend/dados/hardware sem logo próprio).
+const ICONS = [
+  ["flutter", "flutter mobile app", "fa-brands"],
+  ["dart-lang", "dart linguagem", "fa-brands"],
+  ["js-square", "javascript js", "fa-brands"],
+  ["js", "javascript js", "fa-brands"],
+  ["html5", "html5 html", "fa-brands"],
+  ["css3-alt", "css3 css", "fa-brands"],
+  ["css3", "css3 css", "fa-brands"],
+  ["bootstrap", "bootstrap css framework", "fa-brands"],
+  ["figma", "figma design", "fa-brands"],
+  ["node-js", "node nodejs backend", "fa-brands"],
+  ["linux", "linux sistema operacional", "fa-brands"],
+  ["react", "react frontend", "fa-brands"],
+  ["vuejs", "vue frontend", "fa-brands"],
+  ["angular", "angular frontend", "fa-brands"],
+  ["python", "python linguagem", "fa-brands"],
+  ["java", "java linguagem", "fa-brands"],
+  ["php", "php linguagem", "fa-brands"],
+  ["docker", "docker container", "fa-brands"],
+  ["aws", "aws amazon cloud", "fa-brands"],
+  ["google", "google cloud", "fa-brands"],
+  ["android", "android mobile", "fa-brands"],
+  ["apple", "apple ios", "fa-brands"],
+  ["git-alt", "git versionamento", "fa-brands"],
+  ["github", "github git", "fa-brands"],
+  ["server", "servidor backend api", "fa-solid"],
+  ["database", "banco de dados sql", "fa-solid"],
+  ["fire", "firebase tempo real", "fa-solid"],
+  ["microchip", "hardware iot esp32", "fa-solid"],
+  ["cloud", "nuvem cloud", "fa-solid"],
+  ["mobile-screen", "mobile app celular", "fa-solid"],
+  ["code", "código programação", "fa-solid"],
+  ["layer-group", "stack camadas", "fa-solid"],
+];
+
+export default ICONS;

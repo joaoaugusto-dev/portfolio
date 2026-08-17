@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { T, LangSwitch } from "./I18n";
+import { tx } from "@/lib/siteText";
 
 const BITS = [
   "fa-solid fa-laptop-code", "fa-solid fa-keyboard", "fa-solid fa-desktop",
@@ -22,7 +23,7 @@ const links = [
   ["contato", "Contato", "Contact", "fa-solid fa-paper-plane"],
 ];
 
-export default function Nav() {
+export default function Nav({ texts }) {
   const [scrolled, setScrolled] = useState(false);
   const [active, setActive] = useState("");
   const [hideDock, setHideDock] = useState(false);
@@ -102,9 +103,11 @@ export default function Nav() {
     taps.current.timer = setTimeout(() => (taps.current.count = 0), 1200);
   }
 
+  const wordmarkText = tx(texts, "nav.wordmark", "JOÃO AUGUSTO");
   const wordmark = (
     <>
-      JOÃO AUGUSTO<span className="gradient-text">.dev</span>
+      {wordmarkText.pt}
+      <span className="gradient-text">.dev</span>
     </>
   );
 
@@ -125,7 +128,7 @@ export default function Nav() {
             <button
               type="button"
               onClick={onNameClick}
-              aria-label="João Augusto .dev"
+              aria-label={`${wordmarkText.pt} .dev`}
               className="relative cursor-pointer select-none font-semibold tracking-tight"
             >
               <span className="pointer-events-none absolute inset-0 flex items-center justify-center">

@@ -4,10 +4,11 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import ICONS from "./iconList";
 
-// Aceita "fa-solid fa-graduation-cap" (formato salvo) ou só "graduation-cap".
-const slugOf = (value) => value?.replace("fa-solid", "").replace("fa-", "").trim() || "";
+// Aceita "fa-solid fa-graduation-cap" (formato salvo) — pega o último token
+// (funciona pra qualquer estilo: fa-solid, fa-brands, fa-regular).
+const slugOf = (value) => value?.trim().split(/\s+/).pop()?.replace("fa-", "") || "";
 
-export default function IconPicker({ value, onChange }) {
+export default function IconPicker({ value, onChange, list = ICONS }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [mounted, setMounted] = useState(false);
@@ -22,12 +23,12 @@ export default function IconPicker({ value, onChange }) {
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return ICONS;
-    return ICONS.filter(([slug, keywords]) => slug.includes(q) || keywords.includes(q));
-  }, [query]);
+    if (!q) return list;
+    return list.filter(([slug, keywords]) => slug.includes(q) || keywords.includes(q));
+  }, [query, list]);
 
-  function pick(slug) {
-    onChange(`fa-solid fa-${slug}`);
+  function pick(slug, prefix = "fa-solid") {
+    onChange(`${prefix} fa-${slug}`);
     setOpen(false);
     setQuery("");
   }
@@ -84,17 +85,17 @@ export default function IconPicker({ value, onChange }) {
               </div>
 
               <div className="grid grid-cols-4 gap-2 overflow-y-auto sm:grid-cols-5">
-                {results.map(([slug]) => (
+                {results.map(([slug, , prefix = "fa-solid"]) => (
                   <button
                     key={slug}
                     type="button"
-                    onClick={() => pick(slug)}
+                    onClick={() => pick(slug, prefix)}
                     title={slug}
                     className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center transition-colors hover:border-accent hover:text-accent-2 ${
                       slugOf(value) === slug ? "border-accent bg-accent/10 text-accent-2" : "border-white/5 text-muted"
                     }`}
                   >
-                    <i className={`fa-solid fa-${slug} text-xl`} aria-hidden />
+                    <i className={`${prefix} fa-${slug} text-xl`} aria-hidden />
                     <span className="w-full truncate text-[0.65rem] leading-tight">{slug}</span>
                   </button>
                 ))}

@@ -4,9 +4,9 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import Reveal from "./Reveal";
 import { T } from "./I18n";
 import { Spot } from "./Fx";
-import { cats, tech, soft } from "./skillsData";
+import { skillCats } from "@/lib/skillCats";
 
-export default function Skills() {
+export default function Skills({ tech = [], soft = [] }) {
   const [cat, setCat] = useState("all");
   const reduced = useReducedMotion();
   const list = cat === "all" ? tech : tech.filter((t) => t.cat === cat);
@@ -21,7 +21,7 @@ export default function Skills() {
         </Reveal>
 
         <Reveal delay={0.05} className="mb-8 flex flex-wrap justify-center gap-2">
-          {cats.map(([value, pt, en]) => (
+          {skillCats.map(([value, pt, en]) => (
             <button key={value} onClick={() => setCat(value)} data-on={cat === value} className="pill">
               {cat === value && (
                 <motion.span
@@ -39,7 +39,7 @@ export default function Skills() {
           <AnimatePresence mode="popLayout">
             {list.map((t) => (
               <motion.div
-                key={t.name}
+                key={t.id}
                 layout={!reduced}
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -68,13 +68,13 @@ export default function Skills() {
           </h3>
           {/* Estático e centralizado: nada rolando pra atrapalhar a leitura. */}
           <div className="flex flex-wrap justify-center gap-3">
-            {soft.map(([icon, pt, en]) => (
+            {soft.map((s) => (
               <span
-                key={pt}
+                key={s.id}
                 className="flex items-center gap-2.5 rounded-full border border-white/10 bg-surface-2 px-5 py-2.5 text-sm font-medium text-foreground/90 shadow-sm transition-colors hover:border-accent/60"
               >
-                <i className={`${icon} text-accent-2`} aria-hidden />
-                <T pt={pt} en={en} />
+                <i className={`${s.icon} text-accent-2`} aria-hidden />
+                <T pt={s.pt} en={s.en} />
               </span>
             ))}
           </div>

@@ -4,8 +4,7 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import Image from "next/image";
 import { T } from "./I18n";
 import { Magnetic } from "./Fx";
-
-const STACK = ["Flutter", "Node.js", "NestJS", "ESP32", "Supabase"];
+import { tx } from "@/lib/siteText";
 
 // Cada letra é um alvo: entra escalonada e reage ao passar o mouse.
 function Letters({ text, from = 0, className = "" }) {
@@ -26,10 +25,24 @@ function Letters({ text, from = 0, className = "" }) {
   ));
 }
 
-export default function Hero() {
+export default function Hero({ texts }) {
   const [n, setN] = useState(0);
   const avatar = useRef(null);
   const reduced = useReducedMotion();
+
+  const nameLine1 = tx(texts, "hero.nameLine1", "João Augusto");
+  const nameLine2 = tx(texts, "hero.nameLine2", "de Freitas");
+  const tagline = tx(
+    texts,
+    "hero.tagline",
+    "Desenvolvedor de Software em São João da Boa Vista - SP",
+    "Software Developer based in São João da Boa Vista, Brazil",
+  );
+  const buildingWith = tx(texts, "hero.buildingWith", "construindo com", "building with");
+  const stackText = tx(texts, "hero.stack", "Flutter, Node.js, NestJS, ESP32, Supabase");
+  const ctaProjects = tx(texts, "hero.ctaProjects", "Ver Projetos", "View Projects");
+  const ctaContact = tx(texts, "hero.ctaContact", "Vamos Conversar", "Let's Talk");
+  const STACK = stackText.pt.split(",").map((s) => s.trim()).filter(Boolean);
 
   useEffect(() => {
     if (reduced) return;
@@ -79,7 +92,7 @@ export default function Hero() {
           />
           <Image
             src="/images/me.png"
-            alt="João Augusto de Freitas, Desenvolvedor de Software"
+            alt={`${nameLine1.pt} ${nameLine2.pt}, ${tagline.pt}`}
             fill
             sizes="150px"
             priority
@@ -91,25 +104,22 @@ export default function Hero() {
       </div>
 
       <h1 className="mb-5 text-[2.6rem] font-bold leading-[1.05] tracking-tight sm:text-7xl">
-        <Letters text="João Augusto" />
+        <Letters text={nameLine1.pt} />
         <br />
         <span className="gradient-text">
-          <Letters text="de Freitas" from={12} />
+          <Letters text={nameLine2.pt} from={nameLine1.pt.length} />
         </span>
       </h1>
 
       <p className="rise mx-auto mb-3 max-w-2xl text-lg text-muted sm:text-xl" style={{ animationDelay: "0.5s" }}>
-        <T
-          pt="Desenvolvedor de Software em São João da Boa Vista - SP"
-          en="Software Developer based in São João da Boa Vista, Brazil"
-        />
+        <T pt={tagline.pt} en={tagline.en} />
       </p>
 
       <p
         className="rise mb-9 flex items-center justify-center gap-2 text-base text-muted"
         style={{ animationDelay: "0.58s" }}
       >
-        <T pt="construindo com" en="building with" />
+        <T pt={buildingWith.pt} en={buildingWith.en} />
         <span className="relative inline-flex h-6 min-w-[7.5rem] justify-start overflow-hidden text-left">
           <AnimatePresence mode="popLayout" initial={false}>
             <motion.span
@@ -129,13 +139,13 @@ export default function Hero() {
       <div className="rise flex flex-wrap justify-center gap-4" style={{ animationDelay: "0.66s" }}>
         <Magnetic>
           <a href="#projetos" className="btn btn-primary sheen">
-            <T pt="Ver Projetos" en="View Projects" />
+            <T pt={ctaProjects.pt} en={ctaProjects.en} />
             <i className="fa-solid fa-arrow-down text-xs" aria-hidden />
           </a>
         </Magnetic>
         <Magnetic>
           <a href="#contato" className="btn btn-ghost">
-            <T pt="Vamos Conversar" en="Let's Talk" />
+            <T pt={ctaContact.pt} en={ctaContact.en} />
           </a>
         </Magnetic>
       </div>

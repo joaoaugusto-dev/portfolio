@@ -11,6 +11,10 @@ import FilesAdmin from "@/components/admin/FilesAdmin";
 import CoursesAdmin from "@/components/admin/CoursesAdmin";
 import JourneyAdmin from "@/components/admin/JourneyAdmin";
 import GalleryAdmin from "@/components/admin/GalleryAdmin";
+import SocialLinksAdmin from "@/components/admin/SocialLinksAdmin";
+import SkillsAdmin from "@/components/admin/SkillsAdmin";
+import SiteTextsAdmin from "@/components/admin/SiteTextsAdmin";
+import SectionsAdmin from "@/components/admin/SectionsAdmin";
 
 const ADMIN_PATH = process.env.NEXT_PUBLIC_ADMIN_PATH || "estudio";
 
@@ -19,6 +23,10 @@ const tabs = [
   ["gallery", "Galeria", "fa-solid fa-images"],
   ["courses", "Cursos", "fa-solid fa-graduation-cap"],
   ["journey", "Jornada", "fa-solid fa-route"],
+  ["skills", "Habilidades", "fa-solid fa-layer-group"],
+  ["social", "Redes sociais", "fa-solid fa-share-nodes"],
+  ["texts", "Textos", "fa-solid fa-pen-nib"],
+  ["sections", "Seções", "fa-solid fa-bars-staggered"],
   ["files", "Arquivos", "fa-solid fa-folder-open"],
 ];
 
@@ -123,6 +131,10 @@ export default function Dashboard() {
           {tab === "gallery" && <GalleryAdmin token={session.access_token} />}
           {tab === "courses" && <CoursesAdmin token={session.access_token} />}
           {tab === "journey" && <JourneyAdmin token={session.access_token} />}
+          {tab === "skills" && <SkillsAdmin token={session.access_token} />}
+          {tab === "social" && <SocialLinksAdmin token={session.access_token} />}
+          {tab === "texts" && <SiteTextsAdmin token={session.access_token} />}
+          {tab === "sections" && <SectionsAdmin token={session.access_token} />}
           {tab === "files" && <FilesAdmin token={session.access_token} />}
         </motion.div>
       </AnimatePresence>
