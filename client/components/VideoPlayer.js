@@ -25,15 +25,11 @@ export default function VideoPlayer({ src, poster, title }) {
   const [duration, setDuration] = useState(0);
   const [buffered, setBuffered] = useState(0);
   const [volume, setVolume] = useState(1);
-  // Começa mudo: é a única forma de o navegador deixar autoplay tocar assim
-  // que a página abre. O botão de som já resolve destravar o áudio depois.
-  const [muted, setMuted] = useState(true);
+  const [muted, setMuted] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [scrubbing, setScrubbing] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
-  // Começa true: a página abre e já queremos o loading visível antes de
-  // qualquer evento do <video> disparar.
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [connectionLost, setConnectionLost] = useState(false);
 
   function clearStallTimer() {
@@ -144,13 +140,6 @@ export default function VideoPlayer({ src, poster, title }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- armStallTimer só usa refs e setState estáveis, recriar por render não muda o comportamento
   }, []);
 
-  // Autoplay ao entrar na página — sem esperar clique nenhum. Toca o
-  // elemento de vídeo (sistema externo), não é estado sincronizado do React.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- dispara o <video>, único jeito de tocar assim que a página abre
-    requestPlay();
-  }, []);
-
   useEffect(() => {
     const onScrub = (e) => scrubbing && seekTo(e.touches ? e.touches[0].clientX : e.clientX);
     const onScrubEnd = () => setScrubbing(false);
@@ -192,8 +181,6 @@ export default function VideoPlayer({ src, poster, title }) {
         className="w-full h-full"
         playsInline
         muted={muted}
-        // Autoplay já força o carregamento de qualquer forma — preload é só
-        // uma dica pra quando NÃO tem play() automático, então não muda nada aqui.
         preload="metadata"
         onVolumeChange={(e) => {
           setVolume(e.target.volume);
