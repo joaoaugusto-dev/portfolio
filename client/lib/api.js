@@ -1,25 +1,40 @@
-// Principal: o servidor caseiro. ~0,11s por endpoint, contra 0,45-1,7s do Render.
-// HTTPS e não HTTP de propósito: o mesmo host atende os dois, o HTTPS é MAIS
-// rápido (Cloudflare na frente), e o painel do admin chama a API do navegador —
-// uma página https buscando http é mixed content, o browser bloqueia e o admin
-// para de salvar.
-const PRIMARY = "https://api-portfolio.servidorcaseiro.online";
+// Os dois hosts vêm do ambiente. NEXT_PUBLIC_* é trocado por string literal no
+// BUILD — não custa nada em runtime, é igual a uma constante — mas por isso mesmo
+// mudar o valor na Vercel só vale depois de um redeploy.
+//
+// NEXT_PUBLIC_API_URL     principal. Em dev: http://localhost:4000
+// NEXT_PUBLIC_API_URL_2   reserva. Em dev: não defina (ver abaixo)
+//
+// Em produção o principal é o servidor caseiro (~0,11s por endpoint, contra
+// 0,45-1,7s do Render) e a reserva é o Render. HTTPS nos dois, nunca HTTP: o
+// painel do admin chama a API do navegador, e página https buscando http é
+// mixed content — o browser bloqueia e o admin para de salvar.
+const RAW_PRIMARY = process.env.NEXT_PUBLIC_API_URL;
+const RAW_FALLBACK = process.env.NEXT_PUBLIC_API_URL_2;
 
-// Reserva. É servidor caseiro: vai cair. O keep-alive (.github/workflows) mantém
-// o Render acordado justamente pra reserva não chegar dormindo.
-const RENDER = "https://joaoaugusto-portfolio-api.onrender.com";
+// Explode no build, não em produção. Sem isso, variável faltando produzia
+// `undefined/api/projects`: a home renderizava vazia, ia pro cache assim, e nada
+// no log dizia o porquê. Falhar aqui transforma um site quebrado em silêncio num
+// deploy que não passa, com o motivo escrito.
+if (!RAW_PRIMARY) {
+  throw new Error(
+    "NEXT_PUBLIC_API_URL não definida. Defina a URL da API (dev: http://localhost:4000). " +
+      "Opcional: NEXT_PUBLIC_API_URL_2 como reserva, usada se a principal cair.",
+  );
+}
 
 // Barra no fim removida: com ela toda chamada virava `https://host//api/projects`,
-// e servidor com barra dupla pode responder 404. É o tipo de erro que só aparece
-// depois de deployado, porque quem digita a env não vê a concatenação.
-const API_URL = (process.env.NEXT_PUBLIC_API_URL || PRIMARY).replace(/\/+$/, "");
+// e servidor com barra dupla pode responder 404. É erro que só aparece depois de
+// deployado, porque quem digita a variável não vê a concatenação.
+const trim = (u) => u.replace(/\/+$/, "");
 
-// Em dev (NEXT_PUBLIC_API_URL=http://localhost:4000) não existe reserva: se o
-// servidor local não estiver de pé, é pra dar erro na cara, não pra ler
-// silenciosamente os dados de produção achando que são os seus.
-const FALLBACK = API_URL === RENDER || /localhost|127\.0\.0\.1/.test(API_URL) ? null : RENDER;
+const API_URL = trim(RAW_PRIMARY);
 
-const HOSTS = [API_URL, FALLBACK].filter(Boolean);
+// Sem reserva definida, não tem failover — é o caso de dev: se o seu server local
+// não estiver de pé, é pra dar erro na cara, não pra ler silenciosamente os dados
+// de produção achando que são os seus. O filtro de igualdade evita que uma reserva
+// idêntica à principal faça o mesmo host ser tentado duas vezes.
+const HOSTS = [...new Set([API_URL, RAW_FALLBACK && trim(RAW_FALLBACK)].filter(Boolean))];
 
 // GET no principal; se ele falhar, no reserva.
 //

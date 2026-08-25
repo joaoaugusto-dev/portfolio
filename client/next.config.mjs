@@ -1,13 +1,22 @@
 /** @type {import('next').NextConfig} */
-// Mesmo principal do lib/api.js. Aqui NÃO tem reserva: rewrite é config estática,
-// resolvida no build — não dá pra trocar de host quando um cai. Se o servidor
-// caseiro sair do ar, as imagens quebram mas a home continua renderizando (os
-// dados dela têm failover). É o lado certo pra ceder: dado é conteúdo, capa é enfeite.
-// .replace: mesma normalização do lib/api.js — com barra no fim os destinos abaixo
-// virariam `https://host//api/covers/...`.
-const API_URL = (
-  process.env.NEXT_PUBLIC_API_URL || "https://api-portfolio.servidorcaseiro.online"
-).replace(/\/+$/, "");
+// Mesmo principal do lib/api.js, mesma variável. Aqui NÃO tem reserva: rewrite é
+// config estática, resolvida no build — não dá pra trocar de host quando um cai.
+// Se o servidor caseiro sair do ar, as imagens quebram mas a home continua
+// renderizando (os dados dela têm failover). É o lado certo pra ceder: dado é
+// conteúdo, capa é enfeite.
+//
+// O throw é o mesmo motivo do lib/api.js: sem a variável, os destinos abaixo
+// viravam `undefined/api/covers/...` e TODA imagem quebrava calada. E como o
+// next.config é a primeira coisa que o build lê, o erro aparece antes de tudo.
+if (!process.env.NEXT_PUBLIC_API_URL) {
+  throw new Error(
+    "NEXT_PUBLIC_API_URL não definida (next.config.mjs). Defina a URL da API — " +
+      "dev: http://localhost:4000. Veja client/.env.local.example.",
+  );
+}
+
+// Barra no fim removida: com ela os destinos virariam `https://host//api/covers/...`.
+const API_URL = process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, "");
 
 const nextConfig = {
   // Teto de quanto tempo o CDN pode servir uma página vencida. Passado esse
