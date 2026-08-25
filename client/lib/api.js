@@ -36,6 +36,30 @@ const API_URL = trim(RAW_PRIMARY);
 // idêntica à principal faça o mesmo host ser tentado duas vezes.
 const HOSTS = [...new Set([API_URL, RAW_FALLBACK && trim(RAW_FALLBACK)].filter(Boolean))];
 
+export { HOSTS };
+
+// Repassa um GET binário (imagem/vídeo/pdf) tentando os hosts na mesma ordem
+// de getJSON — mesmo failover, mas sem dar parse em JSON: streama o body e
+// copia content-type/cache-control da origem. Usado pelas rotas de proxy que
+// substituíram os rewrites estáticos de capas/mídia (rewrite não troca de
+// host em runtime; isso aqui troca).
+export async function proxyBinary(path) {
+  let last;
+  for (const base of HOSTS) {
+    let res;
+    try {
+      res = await fetch(`${base}${path}`);
+    } catch (err) {
+      last = err;
+      continue;
+    }
+    if (res.ok) return res;
+    last = res;
+    if (res.status < 500) return res; // 4xx: resposta definitiva, não troca de host
+  }
+  return last instanceof Response ? last : new Response(null, { status: 502 });
+}
+
 // GET no principal; se ele falhar, no reserva.
 //
 // Só troca de host em erro de REDE ou 5xx. 404/4xx é resposta definitiva de um
