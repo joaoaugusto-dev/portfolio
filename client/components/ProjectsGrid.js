@@ -2,10 +2,10 @@
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import Image from "next/image";
-import DOMPurify from "isomorphic-dompurify";
 import Reveal from "./Reveal";
 import { T } from "./I18n";
 import { Spot } from "./Fx";
+import sanitizeHtml from "@/lib/sanitizeHtml";
 
 const sorts = [
   ["order", "Relevância", "Relevance"],
@@ -102,7 +102,7 @@ export default function ProjectsGrid({ projects }) {
                     </h3>
                     <div
                       className="line-clamp-4 flex-1 text-base text-muted [&_strong]:text-foreground/80"
-                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(p.description) }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(p.description) }}
                     />
                     <span className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-accent">
                       <T pt="Ir para o projeto" en="Go to project" />
