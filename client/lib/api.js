@@ -1,4 +1,66 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+// Os dois hosts vêm do ambiente. NEXT_PUBLIC_* é trocado por string literal no
+// BUILD — não custa nada em runtime, é igual a uma constante — mas por isso mesmo
+// mudar o valor na Vercel só vale depois de um redeploy.
+//
+// NEXT_PUBLIC_API_URL     principal. Em dev: http://localhost:4000
+// NEXT_PUBLIC_API_URL_2   reserva. Em dev: não defina (ver abaixo)
+//
+// Em produção o principal é o servidor caseiro (~0,11s por endpoint, contra
+// 0,45-1,7s do Render) e a reserva é o Render. HTTPS nos dois, nunca HTTP: o
+// painel do admin chama a API do navegador, e página https buscando http é
+// mixed content — o browser bloqueia e o admin para de salvar.
+const RAW_PRIMARY = process.env.NEXT_PUBLIC_API_URL;
+const RAW_FALLBACK = process.env.NEXT_PUBLIC_API_URL_2;
+
+// Explode no build, não em produção. Sem isso, variável faltando produzia
+// `undefined/api/projects`: a home renderizava vazia, ia pro cache assim, e nada
+// no log dizia o porquê. Falhar aqui transforma um site quebrado em silêncio num
+// deploy que não passa, com o motivo escrito.
+if (!RAW_PRIMARY) {
+  throw new Error(
+    "NEXT_PUBLIC_API_URL não definida. Defina a URL da API (dev: http://localhost:4000). " +
+      "Opcional: NEXT_PUBLIC_API_URL_2 como reserva, usada se a principal cair.",
+  );
+}
+
+// Barra no fim removida: com ela toda chamada virava `https://host//api/projects`,
+// e servidor com barra dupla pode responder 404. É erro que só aparece depois de
+// deployado, porque quem digita a variável não vê a concatenação.
+const trim = (u) => u.replace(/\/+$/, "");
+
+const API_URL = trim(RAW_PRIMARY);
+
+// Sem reserva definida, não tem failover — é o caso de dev: se o seu server local
+// não estiver de pé, é pra dar erro na cara, não pra ler silenciosamente os dados
+// de produção achando que são os seus. O filtro de igualdade evita que uma reserva
+// idêntica à principal faça o mesmo host ser tentado duas vezes.
+const HOSTS = [...new Set([API_URL, RAW_FALLBACK && trim(RAW_FALLBACK)].filter(Boolean))];
+
+// GET no principal; se ele falhar, no reserva.
+//
+// Só troca de host em erro de REDE ou 5xx. 404/4xx é resposta definitiva de um
+// servidor saudável e fica onde está — importa agora, porque /api/home só existe
+// depois que o server for deployado: sem essa regra toda visita iria bater no
+// Render à toa antes de cair no caminho antigo.
+//
+// Sem timeout de propósito: o principal está atrás do Cloudflare, então origem
+// fora do ar vira 5xx rápido (522/523), não conexão pendurada.
+async function getJSON(path, opts) {
+  let last;
+  for (const base of HOSTS) {
+    let res;
+    try {
+      res = await fetch(`${base}${path}`, opts);
+    } catch (err) {
+      last = err; // host inalcançável: tenta o próximo
+      continue;
+    }
+    if (res.ok) return res.json();
+    last = new Error(`${path} respondeu ${res.status}`);
+    if (res.status < 500) throw last; // 4xx: resposta definitiva, não troca de host
+  }
+  throw last;
+}
 
 // `no-store` aqui não deixava só o Data Cache de fora: ele marca a rota inteira
 // como dinâmica. O `revalidate = 60` da home virava enfeite (`next build`
@@ -6,67 +68,74 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 // no Render — que no plano free dorme depois de 15min e acorda em segundos.
 // Era o TTFB de 4,4s no mobile.
 //
-// Cacheado, o mesmo intervalo do Data Cache e da página (60s) mantém as duas
-// camadas em fase — o descompasso é o que travava a home em 9 fotos com 13 no
-// banco. E `expireTime: 120` (next.config.mjs) é o teto: se a revalidação em
-// background falhar, o CDN é obrigado a renderizar de novo, nada congela.
-const CACHED = { next: { revalidate: 60 } };
+// `tags: ["home"]` é o que faz o botão salvar do admin funcionar de verdade.
+// `revalidatePath("/")` limpa o Full Route Cache, mas a invalidação do Data Cache
+// (o que guarda ESTES fetch) por caminho é a parte que não dá pra contar — era
+// por isso que salvar no painel parecia não mudar nada: a rota re-renderizava e
+// tornava a montar a página com os MESMOS dados velhos daqui. Com uma tag
+// explícita, o `updateTag("home")` de lib/actions.js derruba as duas camadas
+// juntas, sempre.
+const CACHED = { next: { revalidate: 60, tags: ["home"] } };
 
 // O admin lê pra editar: precisa do banco agora, não de até 60s atrás.
 export const FRESH = { cache: "no-store" };
 
 export async function getMedia(name) {
-  const res = await fetch(`${API_URL}/api/files/meta/${encodeURIComponent(name)}`, { cache: "no-store" });
-  if (!res.ok) throw new Error("Mídia não encontrada");
-  return res.json();
+  return getJSON(`/api/files/meta/${encodeURIComponent(name)}`, { cache: "no-store" });
+}
+
+// Uma chamada em vez de oito. As 8 rotas individuais continuam existindo (o admin
+// usa cada uma), então se esta falhar — API antiga ainda no ar, deploy pela metade —
+// a home cai no caminho antigo em vez de aparecer vazia.
+export async function getHome(opts = CACHED) {
+  try {
+    return await getJSON("/api/home", opts);
+  } catch {
+    const [projects, courses, journey, gallery, socialLinks, skills, siteTexts, homeSections] =
+      await Promise.all([
+        getProjects(opts).catch(() => []),
+        getCourses(opts).catch(() => []),
+        getJourney(opts).catch(() => []),
+        getGallery(opts).catch(() => []),
+        getSocialLinks(opts).catch(() => []),
+        getSkills(opts).catch(() => []),
+        getSiteTexts(opts).catch(() => []),
+        getHomeSections(opts).catch(() => []),
+      ]);
+    return { projects, courses, journey, gallery, socialLinks, skills, siteTexts, homeSections };
+  }
 }
 
 export async function getProjects(opts = CACHED) {
-  const res = await fetch(`${API_URL}/api/projects`, opts);
-  if (!res.ok) throw new Error("Failed to load projects");
-  return res.json();
+  return getJSON("/api/projects", opts);
 }
 
 export async function getCourses(opts = CACHED) {
-  const res = await fetch(`${API_URL}/api/courses`, opts);
-  if (!res.ok) throw new Error("Failed to load courses");
-  return res.json();
+  return getJSON("/api/courses", opts);
 }
 
 export async function getJourney(opts = CACHED) {
-  const res = await fetch(`${API_URL}/api/journey`, opts);
-  if (!res.ok) throw new Error("Failed to load journey");
-  return res.json();
+  return getJSON("/api/journey", opts);
 }
 
 export async function getGallery(opts = CACHED) {
-  const res = await fetch(`${API_URL}/api/gallery`, opts);
-  if (!res.ok) throw new Error("Failed to load gallery");
-  return res.json();
+  return getJSON("/api/gallery", opts);
 }
 
 export async function getSocialLinks(opts = CACHED) {
-  const res = await fetch(`${API_URL}/api/social-links`, opts);
-  if (!res.ok) throw new Error("Failed to load social links");
-  return res.json();
+  return getJSON("/api/social-links", opts);
 }
 
 export async function getSkills(opts = CACHED) {
-  const res = await fetch(`${API_URL}/api/skills`, opts);
-  if (!res.ok) throw new Error("Failed to load skills");
-  return res.json();
+  return getJSON("/api/skills", opts);
 }
 
 export async function getSiteTexts(opts = CACHED) {
-  const res = await fetch(`${API_URL}/api/site-texts`, opts);
-  if (!res.ok) throw new Error("Failed to load site texts");
-  return res.json();
+  return getJSON("/api/site-texts", opts);
 }
 
 export async function getHomeSections(opts = CACHED) {
-  const res = await fetch(`${API_URL}/api/home-sections`, opts);
-  if (!res.ok) throw new Error("Failed to load home sections");
-  return res.json();
+  return getJSON("/api/home-sections", opts);
 }
 
 export async function getGithubStats(username = "joaoaugusto-dev") {
@@ -77,14 +146,35 @@ export async function getGithubStats(username = "joaoaugusto-dev") {
 }
 
 async function authedFetch(path, token, options = {}) {
-  const res = await fetch(`${API_URL}${path}`, {
+  const init = {
     ...options,
     headers: {
       ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
       Authorization: `Bearer ${token}`,
       ...options.headers,
     },
-  });
+  };
+
+  // Leitura do admin cai pro reserva igual à home. GRAVAÇÃO não: os dois hosts
+  // falam com o MESMO banco, então repetir um POST/PUT que talvez já tenha sido
+  // processado (a resposta é que se perdeu) duplicaria o registro. Se o principal
+  // estiver fora, o admin dá erro e você tenta de novo — é o comportamento certo.
+  const hosts = options.method && options.method !== "GET" ? [API_URL] : HOSTS;
+
+  let res, last;
+  for (const base of hosts) {
+    try {
+      res = await fetch(`${base}${path}`, init);
+    } catch (err) {
+      last = err;
+      res = undefined;
+      continue;
+    }
+    if (res.ok || res.status < 500) break;
+    last = new Error(`Request failed (${res.status})`);
+  }
+  if (!res) throw last;
+
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Request failed (${res.status})`);
