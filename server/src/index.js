@@ -12,6 +12,7 @@ const socialLinksRouter = require("./routes/socialLinks");
 const skillsRouter = require("./routes/skills");
 const siteTextsRouter = require("./routes/siteTexts");
 const homeSectionsRouter = require("./routes/homeSections");
+const homeRouter = require("./routes/home");
 const seed = require("./seed");
 
 const app = express();
@@ -53,6 +54,8 @@ app.use("/api/social-links", socialLinksRouter);
 app.use("/api/skills", skillsRouter);
 app.use("/api/site-texts", siteTextsRouter);
 app.use("/api/home-sections", homeSectionsRouter);
+// Depois de /api/home-sections: rotas distintas, mas manter a ordem evita surpresa.
+app.use("/api/home", homeRouter);
 
 // Rede de segurança: erro que escapou de um handler (asyncRoute captura a maioria,
 // mas isso cobre o resto) vira 500 pro cliente em vez de derrubar o processo.
