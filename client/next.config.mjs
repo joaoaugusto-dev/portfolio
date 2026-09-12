@@ -19,6 +19,18 @@ const nextConfig = {
   turbopack: {
     root: import.meta.dirname,
   },
+
+  // Default do Next tem 8 deviceSizes (até 3840, pensado pra 4K) e 8
+  // imageSizes. Cada combinação de imagem+tamanho conta como uma
+  // transformação cobrada; num portfólio de baixo tráfego isso gera
+  // variantes que quase ninguém pede. Cortado pro que os `sizes` usados
+  // em Hero/Gallery/ProjectsGrid/Courses realmente cobrem: mobile até
+  // desktop 1920 (sem 2K/4K) e só os dois imageSizes que o ícone fixo
+  // de 150px do Hero usa (1x/2x/3x DPR caem em 256 ou 384).
+  images: {
+    deviceSizes: [640, 828, 1200, 1920],
+    imageSizes: [256, 384],
+  },
 };
 
 export default nextConfig;
