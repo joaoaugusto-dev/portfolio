@@ -43,12 +43,17 @@ export { HOSTS };
 // copia content-type/cache-control da origem. Usado pelas rotas de proxy que
 // substituíram os rewrites estáticos de capas/mídia (rewrite não troca de
 // host em runtime; isso aqui troca).
-export async function proxyBinary(path) {
+//
+// `range` repassa o header Range do navegador pro backend — sem isso todo
+// seek de vídeo (arrastar a barra) vinha de volta como GET completo (200,
+// do zero) em vez de 206 parcial, e o <video> reiniciava do início a cada
+// clique na barra de progresso.
+export async function proxyBinary(path, range) {
   let last;
   for (const base of HOSTS) {
     let res;
     try {
-      res = await fetch(`${base}${path}`);
+      res = await fetch(`${base}${path}`, range ? { headers: { range } } : undefined);
     } catch (err) {
       last = err;
       continue;
