@@ -1,9 +1,9 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import Image from "next/image";
 import Reveal from "./Reveal";
-import { T } from "./I18n";
+import { T, useLang } from "./I18n";
 import { Spot } from "./Fx";
 import sanitizeHtml from "@/lib/sanitizeHtml";
 
@@ -12,9 +12,29 @@ const sorts = [
   ["date", "Recentes", "Newest"],
 ];
 
+function formatDate(value, lang) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(lang === "en" ? "en-US" : "pt-BR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
 export default function ProjectsGrid({ projects }) {
   const [sortBy, setSortBy] = useState("order");
+  const [selected, setSelected] = useState(null);
   const reduced = useReducedMotion();
+  const { lang } = useLang();
+
+  useEffect(() => {
+    if (!selected) return;
+    const onKey = (e) => e.key === "Escape" && setSelected(null);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [selected]);
 
   const sorted = useMemo(() => {
     const list = [...projects];
@@ -70,11 +90,17 @@ export default function ProjectsGrid({ projects }) {
                 className="w-full sm:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-1rem)]"
               >
                 <Spot
-                  as="a"
-                  href={p.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group flex h-full flex-col overflow-hidden border border-white/5 bg-surface"
+                  as="div"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelected(p)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelected(p);
+                    }
+                  }}
+                  className="group flex h-full flex-col overflow-hidden border border-white/5 bg-surface cursor-pointer"
                 >
                   <div className="relative aspect-video overflow-hidden">
                     {p.imageUrl && (
@@ -94,18 +120,31 @@ export default function ProjectsGrid({ projects }) {
                         <T pt="Destaque" en="Featured" />
                       </span>
                     )}
+                    <a
+                      href={p.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label="Visit project"
+                      className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white shadow-lg shadow-accent/40 transition-transform hover:scale-110"
+                    >
+                      <i className="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden />
+                    </a>
                   </div>
 
                   <div className="flex flex-1 flex-col p-5">
-                    <h3 className="mb-2 text-lg font-semibold transition-colors group-hover:text-accent-2">
+                    <h3 className="mb-1 text-lg font-semibold transition-colors group-hover:text-accent-2">
                       {p.title}
                     </h3>
+                    {p.projectDate && (
+                      <p className="mb-2 text-xs text-muted">{formatDate(p.projectDate, lang)}</p>
+                    )}
                     <div
                       className="line-clamp-4 flex-1 text-base text-muted [&_strong]:text-foreground/80"
                       dangerouslySetInnerHTML={{ __html: sanitizeHtml(p.description) }}
                     />
                     <span className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-accent">
-                      <T pt="Ir para o projeto" en="Go to project" />
+                      <T pt="Ver mais" en="See more" />
                       <i
                         className="fa-solid fa-arrow-right text-xs transition-transform duration-300 group-hover:translate-x-1.5"
                         aria-hidden
@@ -127,6 +166,78 @@ export default function ProjectsGrid({ projects }) {
           </p>
         )}
       </div>
+
+      <AnimatePresence>
+        {selected && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            onClick={() => setSelected(null)}
+          >
+            <motion.div
+              onClick={(e) => e.stopPropagation()}
+              style={{ transformOrigin: "center" }}
+              className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/10 bg-surface"
+              initial={reduced ? { opacity: 0 } : { scaleY: 0.006, opacity: 1 }}
+              animate={reduced ? { opacity: 1 } : { scaleY: 1, opacity: 1 }}
+              exit={
+                reduced
+                  ? { opacity: 0 }
+                  : { scaleY: 0.006, opacity: 0, transition: { duration: 0.12, ease: "easeIn" } }
+              }
+              transition={
+                reduced
+                  ? { duration: 0.2 }
+                  : { type: "spring", stiffness: 700, damping: 22, mass: 0.7 }
+              }
+            >
+              <button
+                onClick={() => setSelected(null)}
+                aria-label="Fechar"
+                className="absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60"
+              >
+                <i className="fa-solid fa-xmark" aria-hidden />
+              </button>
+
+              {selected.imageUrl && (
+                <div className="relative aspect-video">
+                  <Image
+                    src={selected.imageUrl}
+                    alt={selected.title}
+                    fill
+                    priority
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                    className="object-cover"
+                  />
+                </div>
+              )}
+
+              <div className="p-6">
+                <h3 className="text-2xl font-semibold">{selected.title}</h3>
+                {selected.projectDate && (
+                  <p className="mt-1 text-sm text-muted">{formatDate(selected.projectDate, lang)}</p>
+                )}
+                <div
+                  className="mt-4 text-base text-muted [&_strong]:text-foreground/80"
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(selected.description) }}
+                />
+                <a
+                  href={selected.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-6 inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-accent/40 transition-transform hover:scale-105"
+                >
+                  <T pt="Ir para o projeto" en="Go to project" />
+                  <i className="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden />
+                </a>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </section>
   );
 }
