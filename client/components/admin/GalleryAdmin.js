@@ -1,12 +1,37 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence, Reorder, useDragControls } from "framer-motion";
 import { getGallery, api, FRESH } from "@/lib/api";
 import { revalidateHome } from "@/lib/actions";
 import { sortGalleryByDate, groupByEvent, formatEventDate, eventKey } from "@/lib/gallerySort";
 import { Spot, Toast, useToast } from "@/components/Fx";
 import ImageCropUpload from "@/components/admin/ImageCropUpload";
 import CropModal, { loadImage } from "@/components/admin/CropModal";
+
+// Linha arrastável: só o "puxador" (DragHandle) inicia o arrasto, então clicar em
+// botões/select da linha continua funcionando, e o touch usa touch-none no puxador.
+const DragCtx = createContext(null);
+function DragRow({ value, className, children }) {
+  const controls = useDragControls();
+  return (
+    <Reorder.Item value={value} dragListener={false} dragControls={controls} className={className}>
+      <DragCtx.Provider value={controls}>{children}</DragCtx.Provider>
+    </Reorder.Item>
+  );
+}
+function DragHandle() {
+  const controls = useContext(DragCtx);
+  return (
+    <span
+      onPointerDown={(e) => controls.start(e)}
+      aria-label="Arrastar para reordenar"
+      title="Arraste para reordenar"
+      className="flex h-11 w-7 shrink-0 cursor-grab touch-none select-none items-center justify-center rounded text-muted transition-colors hover:text-accent-2 active:cursor-grabbing"
+    >
+      <i className="fa-solid fa-grip-lines" aria-hidden />
+    </span>
+  );
+}
 
 const emptyEvent = { eventName: "", eventNameEn: "", eventDate: "" };
 const emptyItem = { image: "", width: null, height: null, captionPt: "", captionEn: "", ...emptyEvent };
@@ -261,6 +286,11 @@ export default function GalleryAdmin({ token }) {
     const next = [...ids];
     next.splice(to, 0, ...next.splice(i, 1));
     setPending((p) => ({ ...p, [key]: next }));
+  }
+
+  // Arrastar troca a ordem provisória da pasta; salva no mesmo botão "Salvar ordem".
+  function setOrder(f, ids) {
+    setPending((p) => ({ ...p, [f.key ?? "sem-evento"]: ids }));
   }
 
   async function saveFolderOrder(f) {
@@ -548,13 +578,19 @@ export default function GalleryAdmin({ token }) {
                   exit={{ opacity: 0, height: 0 }}
                   className="overflow-hidden"
                 >
-                  <div className="space-y-2 p-3">
+                  <Reorder.Group
+                    axis="y"
+                    values={f.items.map((x) => x.id)}
+                    onReorder={(ids) => setOrder(f, ids)}
+                    className="space-y-2 p-3"
+                  >
                     {f.items.map((it, i) => (
-                      <motion.div
+                      <DragRow
                         key={it.id}
-                        layout
+                        value={it.id}
                         className={`flex items-center gap-3 rounded-lg border bg-background p-2 ${editing?.id === it.id ? "border-accent shadow-[0_0_0_3px_rgba(155,89,182,0.2)]" : "border-transparent"}`}
                       >
+                        <DragHandle />
                         <div className="flex shrink-0 flex-col gap-0.5">
                           <motion.button
                             type="button"
@@ -617,9 +653,9 @@ export default function GalleryAdmin({ token }) {
                             <i className="fa-solid fa-trash" aria-hidden />
                           </button>
                         </div>
-                      </motion.div>
+                      </DragRow>
                     ))}
-                  </div>
+                  </Reorder.Group>
                 </motion.div>
               )}
             </AnimatePresence>
