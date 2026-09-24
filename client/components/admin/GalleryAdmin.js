@@ -297,7 +297,7 @@ export default function GalleryAdmin({ token }) {
         <Spot
           as="form"
           onSubmit={handleEditSubmit}
-          className="h-fit space-y-4 border border-white/5 bg-surface p-5 sm:p-6 lg:sticky lg:top-6"
+          className="h-fit space-y-4 border border-white/5 bg-surface p-5 sm:p-6 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto"
         >
           <h2 className="flex items-center gap-2 text-lg font-semibold">
             <i className="fa-solid fa-pen text-accent-2" aria-hidden />
@@ -339,7 +339,8 @@ export default function GalleryAdmin({ token }) {
 
           {error && <p className="text-sm text-red-400">{error}</p>}
 
-          <div className="flex gap-3">
+          {/* grudado no rodapé: foto alta não empurra o botão pra fora da tela */}
+          <div className="sticky bottom-0 -mx-5 -mb-5 flex gap-3 bg-surface px-5 pb-5 pt-3 sm:-mx-6 sm:-mb-6 sm:px-6 sm:pb-6">
             <button type="submit" className="btn btn-primary sheen flex-1 py-2.5 text-sm">
               Salvar alterações
             </button>
