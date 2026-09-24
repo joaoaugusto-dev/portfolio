@@ -100,7 +100,7 @@ export default function Dashboard() {
         </div>
       </motion.div>
 
-      <div className="mb-8 flex max-w-full gap-1 overflow-x-auto rounded-xl border border-white/10 bg-surface/60 p-1">
+      <div className="mb-8 flex max-w-full flex-wrap gap-1 rounded-xl border border-white/10 bg-surface/60 p-1">
         {tabs.map(([value, label, icon]) => (
           <button
             key={value}
