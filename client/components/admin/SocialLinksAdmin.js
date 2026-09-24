@@ -56,7 +56,7 @@ export default function SocialLinksAdmin({ token }) {
   function startEdit(l) {
     setEditingId(l.id);
     setForm({ ...l });
-    scrollTo({ top: 0, behavior: "smooth" });
+    if (innerWidth < 1024) scrollTo({ top: 0, behavior: "smooth" }); // no desktop o form é sticky
   }
 
   function resetForm() {

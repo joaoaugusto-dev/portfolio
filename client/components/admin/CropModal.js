@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import Cropper from "react-easy-crop";
 import "react-easy-crop/react-easy-crop.css";
@@ -47,8 +48,11 @@ export default function CropModal({ src, naturalAspect = 1, busy = false, confir
     onConfirm(await cropToBlob(src, area));
   }
 
-  return (
+  // Portal no body: renderizado dentro do formulário (Spot), o modal herdava o
+  // contexto dele e piscava entre o campo e a tela cheia.
+  return createPortal(
     <motion.div
+      onPointerMove={(e) => e.stopPropagation()}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -107,6 +111,7 @@ export default function CropModal({ src, naturalAspect = 1, busy = false, confir
           {confirmLabel}
         </button>
       </div>
-    </motion.div>
+    </motion.div>,
+    document.body,
   );
 }

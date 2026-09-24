@@ -17,6 +17,10 @@ export default function Timeline({ items = [] }) {
 
   if (!items.length) return null;
 
+  const all = items;
+  const subs = (id) => all.filter((s) => s.parentId === id);
+  items = all.filter((it) => !it.parentId);
+
   return (
     <section id="jornada" className="scroll-mt-2 px-6 py-24">
       <div className="mx-auto max-w-4xl">
@@ -84,6 +88,18 @@ export default function Timeline({ items = [] }) {
                       <T pt={item.notePt} en={item.noteEn} />
                     </p>
 
+                    {item.pdfUrl && (
+                      <a
+                        href={item.pdfUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-4 inline-flex items-center gap-2 text-sm text-accent-2 transition-colors hover:text-accent"
+                      >
+                        <i className="fa-solid fa-file-pdf" aria-hidden />
+                        <T pt="Ver PDF" en="View PDF" />
+                      </a>
+                    )}
+
                     <div className={`mt-4 flex flex-wrap gap-2 ${left ? "md:justify-end" : ""}`}>
                       {item.tags.map((tag) => (
                         <span
@@ -94,6 +110,32 @@ export default function Timeline({ items = [] }) {
                         </span>
                       ))}
                     </div>
+
+                    {subs(item.id).map((s) => (
+                      <div key={s.id} className="mt-5 border-t border-white/5 pt-4 text-left">
+                        <div className="flex items-center gap-2 font-mono text-xs font-semibold text-accent-2">
+                          <i className={s.icon} aria-hidden />
+                          <T pt={s.periodPt} en={s.periodEn} />
+                        </div>
+                        <h4 className="mt-1 font-semibold leading-snug">
+                          <T pt={s.titlePt} en={s.titleEn} />
+                        </h4>
+                        <p className="text-sm text-muted">
+                          <T pt={s.notePt || s.schoolPt} en={s.noteEn || s.schoolEn} />
+                        </p>
+                        {s.pdfUrl && (
+                          <a
+                            href={s.pdfUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-2 inline-flex items-center gap-2 text-sm text-accent-2 transition-colors hover:text-accent"
+                          >
+                            <i className="fa-solid fa-file-pdf" aria-hidden />
+                            <T pt="Ver PDF" en="View PDF" />
+                          </a>
+                        )}
+                      </div>
+                    ))}
                   </Spot>
                 </Reveal>
               </div>

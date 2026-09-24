@@ -18,6 +18,8 @@ const empty = {
   notePt: "",
   noteEn: "",
   tags: "",
+  pdfUrl: "",
+  parentId: "",
   live: false,
 };
 
@@ -27,6 +29,7 @@ const field =
 const toForm = (item) => ({ ...item, tags: (item.tags || []).join(", ") });
 const toPayload = (form) => ({
   ...form,
+  parentId: form.parentId ? Number(form.parentId) : null,
   tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean),
 });
 
@@ -37,8 +40,9 @@ export default function JourneyAdmin({ token }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [sendingPdf, setSendingPdf] = useState(false);
   const [toast, notify] = useToast();
-  const { dirty, saving: reordering, moveUp, moveDown, save: saveOrder } = useReorder(items, setItems, persistOrder);
+  const { dirty, saving: reordering, replace, save: saveOrder } = useReorder(items, setItems, persistOrder);
 
   async function refresh() {
     setLoading(true);
@@ -63,15 +67,42 @@ export default function JourneyAdmin({ token }) {
     }
   }
 
+  // Filhos aparecem logo abaixo do pai; as setas movem o pai levando os filhos junto.
+  const parents = items.filter((i) => !i.parentId);
+  const kids = (id) => items.filter((i) => i.parentId === id);
+  const view = parents.flatMap((p) => [p, ...kids(p.id)]);
+
+  function moveParent(pi, dir) {
+    const to = pi + dir;
+    if (to < 0 || to >= parents.length) return;
+    const next = [...parents];
+    next.splice(to, 0, ...next.splice(pi, 1));
+    replace(next.flatMap((p) => [p, ...kids(p.id)]));
+  }
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch on mount
     refresh();
   }, []);
 
+  async function sendPdf(file) {
+    if (!file) return;
+    setError("");
+    setSendingPdf(true);
+    try {
+      const { url } = await api.uploadFile(token, file);
+      setForm((f) => ({ ...f, pdfUrl: url }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSendingPdf(false);
+    }
+  }
+
   function startEdit(item) {
     setEditingId(item.id);
-    setForm(toForm(item));
-    scrollTo({ top: 0, behavior: "smooth" });
+    setForm(toForm({ ...item, pdfUrl: item.pdfUrl || "", parentId: item.parentId || "" }));
+    if (innerWidth < 1024) scrollTo({ top: 0, behavior: "smooth" }); // no desktop o form é sticky
   }
 
   function resetForm() {
@@ -156,6 +187,24 @@ export default function JourneyAdmin({ token }) {
               </span>
             </button>
           </div>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm text-muted">Subitem de</label>
+          <select
+            value={form.parentId}
+            onChange={(e) => setForm({ ...form, parentId: e.target.value })}
+            className={field}
+          >
+            <option value="">— nenhum (item principal) —</option>
+            {items
+              .filter((i) => !i.parentId && i.id !== editingId)
+              .map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.titlePt}
+                </option>
+              ))}
+          </select>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -254,12 +303,38 @@ export default function JourneyAdmin({ token }) {
           />
         </div>
 
+        <div>
+          <label className="mb-1 block text-sm text-muted">PDF (ex.: relatório da IC)</label>
+          {form.pdfUrl ? (
+            <div className="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm">
+              <i className="fa-solid fa-file-pdf text-accent-2" aria-hidden />
+              <a href={form.pdfUrl} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate hover:text-accent-2">
+                {form.pdfUrl}
+              </a>
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, pdfUrl: "" })}
+                aria-label="Remover PDF"
+                className="text-muted transition-colors hover:text-red-400"
+              >
+                <i className="fa-solid fa-xmark" aria-hidden />
+              </button>
+            </div>
+          ) : (
+            <label className="flex cursor-pointer items-center gap-2 rounded-xl border-2 border-dashed border-white/15 px-3 py-3 text-sm text-muted transition-colors hover:border-accent/60">
+              <i className={`fa-solid ${sendingPdf ? "fa-circle-notch fa-spin" : "fa-cloud-arrow-up"} text-accent-2`} aria-hidden />
+              {sendingPdf ? "Enviando..." : "Escolher PDF"}
+              <input type="file" accept="application/pdf" hidden disabled={sendingPdf} onChange={(e) => sendPdf(e.target.files[0])} />
+            </label>
+          )}
+        </div>
+
         {error && <p className="text-sm text-red-400">{error}</p>}
 
         <div className="flex gap-3">
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || sendingPdf}
             className="btn btn-primary sheen flex-1 py-2.5 text-sm disabled:opacity-50"
           >
             {saving && <i className="fa-solid fa-circle-notch fa-spin" aria-hidden />}
@@ -302,7 +377,10 @@ export default function JourneyAdmin({ token }) {
           [0, 1, 2].map((i) => <div key={i} className="h-[4.5rem] animate-pulse rounded-xl bg-surface/70" />)}
 
         <AnimatePresence initial={false}>
-          {items.map((item, i) => (
+          {view.map((item) => {
+            const child = !!item.parentId;
+            const pi = parents.indexOf(item);
+            return (
             <motion.div
               key={item.id}
               layout
@@ -310,14 +388,17 @@ export default function JourneyAdmin({ token }) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97 }}
               transition={{ type: "spring", stiffness: 400, damping: 36 }}
-              className="flex items-center gap-3 rounded-xl border border-white/5 bg-surface p-2.5"
+              className={`flex items-center gap-3 rounded-xl border border-white/5 bg-surface p-2.5 ${child ? "ml-8 border-l-2 border-l-accent/50" : ""}`}
             >
+              {child ? (
+                <i className="fa-solid fa-turn-up w-7 shrink-0 rotate-90 text-center text-muted/50" aria-hidden />
+              ) : (
               <div className="flex shrink-0 flex-col gap-0.5">
                 <motion.button
                   type="button"
                   whileTap={{ y: -2 }}
-                  onClick={() => moveUp(i)}
-                  disabled={i === 0}
+                  onClick={() => moveParent(pi, -1)}
+                  disabled={pi === 0}
                   aria-label="Mover para cima"
                   className="flex h-5 w-7 items-center justify-center rounded border border-white/10 text-[10px] text-muted transition-colors hover:border-accent hover:text-accent-2 disabled:pointer-events-none disabled:opacity-30"
                 >
@@ -326,14 +407,15 @@ export default function JourneyAdmin({ token }) {
                 <motion.button
                   type="button"
                   whileTap={{ y: 2 }}
-                  onClick={() => moveDown(i)}
-                  disabled={i === items.length - 1}
+                  onClick={() => moveParent(pi, 1)}
+                  disabled={pi === parents.length - 1}
                   aria-label="Mover para baixo"
                   className="flex h-5 w-7 items-center justify-center rounded border border-white/10 text-[10px] text-muted transition-colors hover:border-accent hover:text-accent-2 disabled:pointer-events-none disabled:opacity-30"
                 >
                   <i className="fa-solid fa-chevron-down" aria-hidden />
                 </motion.button>
               </div>
+              )}
 
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-background text-accent-2">
                 <i className={item.icon} aria-hidden />
@@ -345,7 +427,7 @@ export default function JourneyAdmin({ token }) {
                   {item.titlePt}
                 </p>
                 <p className="truncate text-xs text-muted">
-                  {item.periodPt} · posição {i + 1}
+                  {child ? `anexo de ${items.find((p) => p.id === item.parentId)?.titlePt ?? "—"} · ` : ""}{item.periodPt}{!child && ` · posição ${pi + 1}`}
                 </p>
               </div>
 
@@ -366,7 +448,8 @@ export default function JourneyAdmin({ token }) {
                 </button>
               </div>
             </motion.div>
-          ))}
+            );
+          })}
         </AnimatePresence>
 
         {!loading && !items.length && (

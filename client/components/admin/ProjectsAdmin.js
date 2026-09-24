@@ -55,7 +55,7 @@ export default function ProjectsAdmin({ token }) {
   function startEdit(p) {
     setEditingId(p.id);
     setForm({ ...p, projectDate: p.projectDate?.slice(0, 10) });
-    scrollTo({ top: 0, behavior: "smooth" });
+    if (innerWidth < 1024) scrollTo({ top: 0, behavior: "smooth" }); // no desktop o form é sticky
   }
 
   function resetForm() {

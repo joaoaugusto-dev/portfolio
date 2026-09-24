@@ -163,7 +163,7 @@ export default function GalleryAdmin({ token }) {
 
   function startEdit(it) {
     setEditing({ ...emptyItem, ...it, eventDate: it.eventDate?.slice(0, 10) || "" });
-    scrollTo({ top: 0, behavior: "smooth" });
+    if (innerWidth < 1024) scrollTo({ top: 0, behavior: "smooth" }); // no desktop o form é sticky
   }
 
   async function handleEditSubmit(e) {
@@ -177,6 +177,21 @@ export default function GalleryAdmin({ token }) {
       await api.updateGalleryItem(token, editing.id, editing);
       notify("Foto atualizada");
       setEditing(null);
+      refresh();
+      syncHome();
+    } catch (err) {
+      setError(err.message);
+      notify(err.message, "error");
+    }
+  }
+
+  // Recorte de foto já postada salva na hora: o arquivo novo já subiu, então
+  // deixar pra "Salvar alterações" só arriscava perder o recorte.
+  async function saveCropped(next) {
+    setEditing(next);
+    try {
+      await api.updateGalleryItem(token, next.id, next);
+      notify("Recorte salvo");
       refresh();
       syncHome();
     } catch (err) {
@@ -282,7 +297,7 @@ export default function GalleryAdmin({ token }) {
         <Spot
           as="form"
           onSubmit={handleEditSubmit}
-          className="h-fit space-y-4 border border-white/5 bg-surface p-5 sm:p-6 lg:sticky lg:top-6"
+          className="h-fit space-y-4 border border-white/5 bg-surface p-5 sm:p-6 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto"
         >
           <h2 className="flex items-center gap-2 text-lg font-semibold">
             <i className="fa-solid fa-pen text-accent-2" aria-hidden />
@@ -292,9 +307,11 @@ export default function GalleryAdmin({ token }) {
           <ImageCropUpload
             token={token}
             value={editing.image}
-            onChange={(image, meta = {}) =>
-              setEditing({ ...editing, image, width: meta.width ?? null, height: meta.height ?? null })
-            }
+            onChange={(image, meta = {}) => {
+              const next = { ...editing, image, width: meta.width ?? null, height: meta.height ?? null };
+              if (meta.cropped) saveCropped(next);
+              else setEditing(next);
+            }}
           />
 
           <EventFields value={editing} onChange={(v) => setEditing({ ...editing, ...v })} />
@@ -322,7 +339,8 @@ export default function GalleryAdmin({ token }) {
 
           {error && <p className="text-sm text-red-400">{error}</p>}
 
-          <div className="flex gap-3">
+          {/* grudado no rodapé: foto alta não empurra o botão pra fora da tela */}
+          <div className="sticky bottom-0 -mx-5 -mb-5 flex gap-3 bg-surface px-5 pb-5 pt-3 sm:-mx-6 sm:-mb-6 sm:px-6 sm:pb-6">
             <button type="submit" className="btn btn-primary sheen flex-1 py-2.5 text-sm">
               Salvar alterações
             </button>
@@ -535,7 +553,7 @@ export default function GalleryAdmin({ token }) {
                       <motion.div
                         key={it.id}
                         layout
-                        className="flex items-center gap-2.5 rounded-lg border border-transparent bg-background p-2"
+                        className={`flex items-center gap-3 rounded-lg border bg-background p-2 ${editing?.id === it.id ? "border-accent shadow-[0_0_0_3px_rgba(155,89,182,0.2)]" : "border-transparent"}`}
                       >
                         <div className="flex shrink-0 flex-col gap-0.5">
                           <motion.button
@@ -561,7 +579,7 @@ export default function GalleryAdmin({ token }) {
                         </div>
 
                         {/* eslint-disable-next-line @next/next/no-img-element -- miniatura da API, sem otimização */}
-                        <img src={it.image} alt="" className="h-11 w-16 shrink-0 rounded object-cover" />
+                        <img src={it.image} alt="" className="h-24 w-36 shrink-0 rounded-lg object-cover sm:h-28 sm:w-44" />
 
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm">{it.captionPt || <span className="text-muted">sem legenda</span>}</p>

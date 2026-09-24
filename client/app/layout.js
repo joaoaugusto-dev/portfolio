@@ -59,7 +59,7 @@ export const metadata = {
     siteName: "João Augusto de Freitas - Portfolio",
     title: TITLE,
     description: DESC,
-    images: ["/images/me.png"],
+    images: ["/images/me.jpg"],
     locale: "pt_BR",
     alternateLocale: "en_US",
   },
@@ -67,7 +67,7 @@ export const metadata = {
     card: "summary_large_image",
     title: TITLE,
     description: DESC,
-    images: ["/images/me.png"],
+    images: ["/images/me.jpg"],
   },
   other: { "geo.region": "BR-SP", "geo.placename": "São João da Boa Vista" },
 };
@@ -80,7 +80,7 @@ const jsonLd = {
   name: "João Augusto de Freitas",
   alternateName: "João Augusto Dev",
   url: SITE + "/",
-  image: SITE + "/images/me.png",
+  image: SITE + "/images/me.jpg",
   jobTitle: "Desenvolvedor de Software Full-Stack",
   description:
     "Desenvolvedor de software full-stack (dev) em São João da Boa Vista - SP, especializado em Flutter, Node.js, NestJS e ESP32/IoT.",

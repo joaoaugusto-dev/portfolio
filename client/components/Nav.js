@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
@@ -13,17 +13,24 @@ const BITS = [
 ];
 const GLYPHS = ["{}", "</>", ";", "$", "#", "()", "=>", "[]", "&&", "0", "1"];
 
-const links = [
-  ["sobre", "Sobre", "About", "fa-solid fa-user"],
-  ["galeria", "Galeria", "Gallery", "fa-solid fa-images"],
-  ["skills", "Habilidades", "Skills", "fa-solid fa-code"],
-  ["projetos", "Projetos", "Projects", "fa-solid fa-diagram-project"],
-  ["jornada", "Jornada", "Journey", "fa-solid fa-route"],
-  ["cursos", "Cursos", "Courses", "fa-solid fa-graduation-cap"],
-  ["contato", "Contato", "Contact", "fa-solid fa-paper-plane"],
+const ALL_LINKS = [
+  ["sobre", "Sobre", "About", "fa-solid fa-user", "about"],
+  ["galeria", "Galeria", "Gallery", "fa-solid fa-images", "gallery"],
+  ["skills", "Habilidades", "Skills", "fa-solid fa-code", "skills"],
+  ["projetos", "Projetos", "Projects", "fa-solid fa-diagram-project", "projects"],
+  ["midia", "Na Mídia", "In the Press", "fa-solid fa-newspaper", "news"],
+  ["jornada", "Jornada", "Journey", "fa-solid fa-route", "journey"],
+  ["cursos", "Cursos", "Courses", "fa-solid fa-graduation-cap", "courses"],
+  ["contato", "Contato", "Contact", "fa-solid fa-paper-plane", "contact"],
 ];
 
-export default function Nav({ texts }) {
+// `order` = chaves das seções visíveis, na ordem definida no admin (page.js).
+// Sem ele (páginas fora da home) a nav não mostra links, então o padrão só importa aqui.
+export default function Nav({ texts, order }) {
+  const links = useMemo(
+    () => (order ? order.map((k) => ALL_LINKS.find((l) => l[4] === k)).filter(Boolean) : ALL_LINKS),
+    [order],
+  );
   const [scrolled, setScrolled] = useState(false);
   const [active, setActive] = useState("");
   const [hideDock, setHideDock] = useState(false);
@@ -65,7 +72,7 @@ export default function Nav({ texts }) {
       if (el) obs.observe(el);
     }
     return () => obs.disconnect();
-  }, [isHome]);
+  }, [isHome, links]);
 
   // Cada clique solta uma explosãozinha de elementos de dev por trás do nome.
   function burst(strength) {

@@ -11,6 +11,7 @@ const sectionMeta = {
   gallery: { label: "Galeria", icon: "fa-solid fa-images" },
   skills: { label: "Habilidades", icon: "fa-solid fa-layer-group" },
   projects: { label: "Projetos", icon: "fa-solid fa-diagram-project" },
+  news: { label: "Na Mídia", icon: "fa-solid fa-newspaper" },
   journey: { label: "Jornada", icon: "fa-solid fa-route" },
   courses: { label: "Cursos", icon: "fa-solid fa-graduation-cap" },
   contact: { label: "Contato", icon: "fa-solid fa-paper-plane" },

@@ -120,7 +120,7 @@ export async function getHome(opts = CACHED) {
   try {
     return await getJSON("/api/home", opts);
   } catch {
-    const [projects, courses, journey, gallery, socialLinks, skills, siteTexts, homeSections] =
+    const [projects, courses, journey, gallery, socialLinks, skills, siteTexts, homeSections, news] =
       await Promise.all([
         getProjects(opts).catch(() => []),
         getCourses(opts).catch(() => []),
@@ -130,13 +130,18 @@ export async function getHome(opts = CACHED) {
         getSkills(opts).catch(() => []),
         getSiteTexts(opts).catch(() => []),
         getHomeSections(opts).catch(() => []),
+        getNews(opts).catch(() => []),
       ]);
-    return { projects, courses, journey, gallery, socialLinks, skills, siteTexts, homeSections };
+    return { projects, courses, journey, gallery, socialLinks, skills, siteTexts, homeSections, news };
   }
 }
 
 export async function getProjects(opts = CACHED) {
   return getJSON("/api/projects", opts);
+}
+
+export async function getNews(opts = CACHED) {
+  return getJSON("/api/news", opts);
 }
 
 export async function getCourses(opts = CACHED) {
@@ -221,6 +226,12 @@ export const api = {
     authedFetch(`/api/projects/${id}`, token, { method: "DELETE" }),
   reorderProjects: (token, ids) =>
     authedFetch("/api/projects/reorder", token, { method: "PUT", body: JSON.stringify({ ids }) }),
+  createNews: (token, data) =>
+    authedFetch("/api/news", token, { method: "POST", body: JSON.stringify(data) }),
+  updateNews: (token, id, data) =>
+    authedFetch(`/api/news/${id}`, token, { method: "PUT", body: JSON.stringify(data) }),
+  deleteNews: (token, id) =>
+    authedFetch(`/api/news/${id}`, token, { method: "DELETE" }),
   createCourse: (token, data) =>
     authedFetch("/api/courses", token, { method: "POST", body: JSON.stringify(data) }),
   updateCourse: (token, id, data) =>

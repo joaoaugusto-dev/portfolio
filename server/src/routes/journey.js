@@ -35,6 +35,7 @@ router.put("/:id", requireAuth, async (req, res) => {
 router.delete("/:id", requireAuth, async (req, res) => {
   const item = await JourneyItem.findByPk(req.params.id);
   if (!item) return res.status(404).json({ error: "Not found" });
+  await JourneyItem.destroy({ where: { parentId: item.id } });
   await item.destroy();
   res.status(204).end();
 });

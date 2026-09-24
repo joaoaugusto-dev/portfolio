@@ -12,6 +12,8 @@ const JourneyItem = sequelize.define("JourneyItem", {
   notePt: { type: DataTypes.STRING },
   noteEn: { type: DataTypes.STRING },
   tags: { type: DataTypes.ARRAY(DataTypes.STRING), defaultValue: [] },
+  pdfUrl: { type: DataTypes.STRING },
+  parentId: { type: DataTypes.INTEGER }, // subitem de outro item da jornada
   live: { type: DataTypes.BOOLEAN, defaultValue: false },
   order: { type: DataTypes.INTEGER, defaultValue: 0 },
 });

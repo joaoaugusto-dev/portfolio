@@ -74,9 +74,10 @@ const homeSections = [
   { key: "gallery", order: 1, visible: true },
   { key: "skills", order: 2, visible: true },
   { key: "projects", order: 3, visible: true },
-  { key: "journey", order: 4, visible: true },
-  { key: "courses", order: 5, visible: true },
-  { key: "contact", order: 6, visible: true },
+  { key: "news", order: 4, visible: true },
+  { key: "journey", order: 5, visible: true },
+  { key: "courses", order: 6, visible: true },
+  { key: "contact", order: 7, visible: true },
 ];
 
 // Idempotente: só popula uma tabela se ela estiver vazia, então é seguro
@@ -86,6 +87,13 @@ async function seed() {
   if (!(await Skill.count())) await Skill.bulkCreate(skills);
   if (!(await SiteText.count())) await SiteText.bulkCreate(siteTexts);
   if (!(await HomeSection.count())) await HomeSection.bulkCreate(homeSections);
+  // Banco já existente: seção nova entra no fim (o admin reordena), sem mexer nas outras.
+  else {
+    const have = new Set((await HomeSection.findAll()).map((s) => s.key));
+    const max = (await HomeSection.max("order")) ?? -1;
+    const missing = homeSections.filter((s) => !have.has(s.key)).map((s, i) => ({ ...s, order: max + 1 + i }));
+    if (missing.length) await HomeSection.bulkCreate(missing);
+  }
 }
 
 module.exports = seed;
