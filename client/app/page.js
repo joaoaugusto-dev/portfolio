@@ -6,6 +6,7 @@ import Skills from "@/components/Skills";
 import ProjectsGrid from "@/components/ProjectsGrid";
 import Timeline from "@/components/Timeline";
 import Courses from "@/components/Courses";
+import News from "@/components/News";
 import Contact from "@/components/Contact";
 import Footer from "@/components/Footer";
 import { getHome, getGithubStats } from "@/lib/api";
@@ -21,7 +22,7 @@ export const revalidate = 60;
 // Ordem fixa de fallback: se a API do banco de seções estiver fora do ar ou a
 // tabela ainda não tiver sido semeada, a home cai nessa ordem em vez de sumir
 // seções inteiras.
-const DEFAULT_ORDER = ["about", "gallery", "skills", "projects", "journey", "courses", "contact"];
+const DEFAULT_ORDER = ["about", "gallery", "skills", "projects", "news", "journey", "courses", "contact"];
 
 export default async function Home() {
   // Duas chamadas, não nove: getHome() traz as 8 listas da API numa requisição só
@@ -42,6 +43,7 @@ export default async function Home() {
     socialLinks = [],
     skills = [],
     homeSections = [],
+    news = [],
   } = home;
 
   // getHome() já cai nas 8 rotas antigas se /api/home falhar, e cada uma delas tem
@@ -76,6 +78,7 @@ export default async function Home() {
     gallery: <Gallery key="gallery" items={gallery} />,
     skills: <Skills key="skills" tech={tech} soft={soft} />,
     projects: <ProjectsGrid key="projects" projects={projects} />,
+    news: <News key="news" items={news} />,
     journey: <Timeline key="journey" items={journey} />,
     courses: <Courses key="courses" courses={courses} />,
     contact: <Contact key="contact" texts={texts} socialLinks={socialLinks} />,
@@ -90,7 +93,7 @@ export default async function Home() {
 
   return (
     <>
-      <Nav texts={texts} />
+      <Nav texts={texts} order={order} />
       <main>
         <Hero texts={texts} />
         {order.map((key) => sectionEls[key]).filter(Boolean)}
