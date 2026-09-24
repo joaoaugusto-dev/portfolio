@@ -71,7 +71,7 @@ export default function JourneyAdmin({ token }) {
   function startEdit(item) {
     setEditingId(item.id);
     setForm(toForm(item));
-    scrollTo({ top: 0, behavior: "smooth" });
+    if (innerWidth < 1024) scrollTo({ top: 0, behavior: "smooth" }); // no desktop o form é sticky
   }
 
   function resetForm() {

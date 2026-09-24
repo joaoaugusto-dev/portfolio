@@ -163,7 +163,7 @@ export default function GalleryAdmin({ token }) {
 
   function startEdit(it) {
     setEditing({ ...emptyItem, ...it, eventDate: it.eventDate?.slice(0, 10) || "" });
-    scrollTo({ top: 0, behavior: "smooth" });
+    if (innerWidth < 1024) scrollTo({ top: 0, behavior: "smooth" }); // no desktop o form é sticky
   }
 
   async function handleEditSubmit(e) {

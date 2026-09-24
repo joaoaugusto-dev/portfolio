@@ -71,7 +71,7 @@ export default function SkillsAdmin({ token }) {
   function startEdit(s) {
     setEditingId(s.id);
     setForm({ type: s.type, name: s.name || "", icon: s.icon, cat: s.cat || "mobile", pt: s.pt, en: s.en });
-    scrollTo({ top: 0, behavior: "smooth" });
+    if (innerWidth < 1024) scrollTo({ top: 0, behavior: "smooth" }); // no desktop o form é sticky
   }
 
   function resetForm() {

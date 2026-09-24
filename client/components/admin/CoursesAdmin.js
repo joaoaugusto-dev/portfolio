@@ -62,7 +62,7 @@ export default function CoursesAdmin({ token }) {
   function startEdit(c) {
     setEditingId(c.id);
     setForm({ ...c });
-    scrollTo({ top: 0, behavior: "smooth" });
+    if (innerWidth < 1024) scrollTo({ top: 0, behavior: "smooth" }); // no desktop o form é sticky
   }
 
   function resetForm() {
