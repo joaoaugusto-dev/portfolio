@@ -99,7 +99,7 @@ export default function ImageCropUpload({ token, value, onChange }) {
               <img
                 src={value}
                 alt=""
-                className="max-h-64 w-full rounded-xl border border-white/10 object-contain bg-background"
+                className="max-h-[26rem] w-full rounded-xl border border-white/10 object-contain bg-background"
               />
               <button
                 type="button"
@@ -128,7 +128,7 @@ export default function ImageCropUpload({ token, value, onChange }) {
               <img
                 src={picked.url}
                 alt=""
-                className="max-h-64 w-full rounded-xl border border-white/10 object-contain bg-background"
+                className="max-h-[26rem] w-full rounded-xl border border-white/10 object-contain bg-background"
               />
               <div className="flex gap-2">
                 <button

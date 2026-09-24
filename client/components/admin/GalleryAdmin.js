@@ -535,7 +535,7 @@ export default function GalleryAdmin({ token }) {
                       <motion.div
                         key={it.id}
                         layout
-                        className="flex items-center gap-2.5 rounded-lg border border-transparent bg-background p-2"
+                        className={`flex items-center gap-3 rounded-lg border bg-background p-2 ${editing?.id === it.id ? "border-accent shadow-[0_0_0_3px_rgba(155,89,182,0.2)]" : "border-transparent"}`}
                       >
                         <div className="flex shrink-0 flex-col gap-0.5">
                           <motion.button
@@ -561,7 +561,7 @@ export default function GalleryAdmin({ token }) {
                         </div>
 
                         {/* eslint-disable-next-line @next/next/no-img-element -- miniatura da API, sem otimização */}
-                        <img src={it.image} alt="" className="h-11 w-16 shrink-0 rounded object-cover" />
+                        <img src={it.image} alt="" className="h-24 w-36 shrink-0 rounded-lg object-cover sm:h-28 sm:w-44" />
 
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm">{it.captionPt || <span className="text-muted">sem legenda</span>}</p>
