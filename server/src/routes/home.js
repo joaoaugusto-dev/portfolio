@@ -1,6 +1,7 @@
 const express = require("express");
 const Project = require("../models/Project");
 const Course = require("../models/Course");
+const newsRouter = require("./news");
 const JourneyItem = require("../models/JourneyItem");
 const GalleryItem = require("../models/GalleryItem");
 const SocialLink = require("../models/SocialLink");
@@ -24,7 +25,7 @@ const router = express.Router();
 // As rotas individuais continuam existindo: o admin usa cada uma, e `lib/api.js`
 // cai nelas se esta falhar.
 router.get("/", async (req, res) => {
-  const [projects, courses, journey, gallery, socialLinks, skills, siteTexts, homeSections] =
+  const [projects, courses, journey, gallery, socialLinks, skills, siteTexts, homeSections, news] =
     await Promise.all([
       Project.findAll({ order: [["order", "ASC"]] }),
       Course.findAll({ order: [["order", "ASC"]] }),
@@ -34,9 +35,10 @@ router.get("/", async (req, res) => {
       Skill.findAll({ order: [["order", "ASC"]] }),
       SiteText.findAll({ order: [["group", "ASC"], ["order", "ASC"], ["id", "ASC"]] }),
       HomeSection.findAll({ order: [["order", "ASC"]] }),
+      newsRouter.list(),
     ]);
 
-  res.json({ projects, courses, journey, gallery, socialLinks, skills, siteTexts, homeSections });
+  res.json({ projects, courses, journey, gallery, socialLinks, skills, siteTexts, homeSections, news });
 });
 
 module.exports = router;
