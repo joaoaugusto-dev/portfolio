@@ -84,6 +84,18 @@ export default function Timeline({ items = [] }) {
                       <T pt={item.notePt} en={item.noteEn} />
                     </p>
 
+                    {item.pdfUrl && (
+                      <a
+                        href={item.pdfUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-4 inline-flex items-center gap-2 text-sm text-accent-2 transition-colors hover:text-accent"
+                      >
+                        <i className="fa-solid fa-file-pdf" aria-hidden />
+                        <T pt="Ver PDF" en="View PDF" />
+                      </a>
+                    )}
+
                     <div className={`mt-4 flex flex-wrap gap-2 ${left ? "md:justify-end" : ""}`}>
                       {item.tags.map((tag) => (
                         <span

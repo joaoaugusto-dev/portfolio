@@ -18,6 +18,7 @@ const empty = {
   notePt: "",
   noteEn: "",
   tags: "",
+  pdfUrl: "",
   live: false,
 };
 
@@ -37,6 +38,7 @@ export default function JourneyAdmin({ token }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [sendingPdf, setSendingPdf] = useState(false);
   const [toast, notify] = useToast();
   const { dirty, saving: reordering, moveUp, moveDown, save: saveOrder } = useReorder(items, setItems, persistOrder);
 
@@ -68,9 +70,23 @@ export default function JourneyAdmin({ token }) {
     refresh();
   }, []);
 
+  async function sendPdf(file) {
+    if (!file) return;
+    setError("");
+    setSendingPdf(true);
+    try {
+      const { url } = await api.uploadFile(token, file);
+      setForm((f) => ({ ...f, pdfUrl: url }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSendingPdf(false);
+    }
+  }
+
   function startEdit(item) {
     setEditingId(item.id);
-    setForm(toForm(item));
+    setForm(toForm({ ...item, pdfUrl: item.pdfUrl || "" }));
     if (innerWidth < 1024) scrollTo({ top: 0, behavior: "smooth" }); // no desktop o form é sticky
   }
 
@@ -254,12 +270,38 @@ export default function JourneyAdmin({ token }) {
           />
         </div>
 
+        <div>
+          <label className="mb-1 block text-sm text-muted">PDF (ex.: relatório da IC)</label>
+          {form.pdfUrl ? (
+            <div className="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm">
+              <i className="fa-solid fa-file-pdf text-accent-2" aria-hidden />
+              <a href={form.pdfUrl} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate hover:text-accent-2">
+                {form.pdfUrl}
+              </a>
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, pdfUrl: "" })}
+                aria-label="Remover PDF"
+                className="text-muted transition-colors hover:text-red-400"
+              >
+                <i className="fa-solid fa-xmark" aria-hidden />
+              </button>
+            </div>
+          ) : (
+            <label className="flex cursor-pointer items-center gap-2 rounded-xl border-2 border-dashed border-white/15 px-3 py-3 text-sm text-muted transition-colors hover:border-accent/60">
+              <i className={`fa-solid ${sendingPdf ? "fa-circle-notch fa-spin" : "fa-cloud-arrow-up"} text-accent-2`} aria-hidden />
+              {sendingPdf ? "Enviando..." : "Escolher PDF"}
+              <input type="file" accept="application/pdf" hidden disabled={sendingPdf} onChange={(e) => sendPdf(e.target.files[0])} />
+            </label>
+          )}
+        </div>
+
         {error && <p className="text-sm text-red-400">{error}</p>}
 
         <div className="flex gap-3">
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || sendingPdf}
             className="btn btn-primary sheen flex-1 py-2.5 text-sm disabled:opacity-50"
           >
             {saving && <i className="fa-solid fa-circle-notch fa-spin" aria-hidden />}
