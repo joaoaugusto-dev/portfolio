@@ -73,6 +73,7 @@ sequelize
   .sync()
   // sync() não altera tabela existente; ponytail: sem migrations, uma linha por coluna nova
   .then(() => sequelize.query('ALTER TABLE "JourneyItems" ADD COLUMN IF NOT EXISTS "pdfUrl" VARCHAR(255)'))
+  .then(() => sequelize.query('ALTER TABLE "JourneyItems" ADD COLUMN IF NOT EXISTS "parentId" INTEGER'))
   .then(seed)
   .then(() => {
     app.listen(port, () => console.log(`API listening on :${port}`));

@@ -33,5 +33,11 @@ export default function useReorder(list, setList, onSave) {
     }
   }
 
-  return { dirty, saving, moveUp: (i) => move(i, -1), moveDown: (i) => move(i, 1), save };
+  // Troca a lista inteira de uma vez (reordenação por grupos, ex.: itens com subitens).
+  function replace(next) {
+    setList(next);
+    setDirty(true);
+  }
+
+  return { dirty, saving, replace, moveUp: (i) => move(i, -1), moveDown: (i) => move(i, 1), save };
 }

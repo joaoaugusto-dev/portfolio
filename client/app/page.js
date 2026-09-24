@@ -72,7 +72,7 @@ export default async function Home() {
         socialLinks={socialLinks}
         githubRepoCount={github?.publicRepos}
         fallbackProjectCount={projects.length}
-        courseCount={courses.length + journey.length}
+        courseCount={courses.length + journey.filter((j) => !j.parentId).length}
       />
     ),
     gallery: <Gallery key="gallery" items={gallery} />,
