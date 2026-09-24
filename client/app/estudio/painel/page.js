@@ -9,6 +9,7 @@ import { Toast, useToast } from "@/components/Fx";
 import ProjectsAdmin from "@/components/admin/ProjectsAdmin";
 import FilesAdmin from "@/components/admin/FilesAdmin";
 import CoursesAdmin from "@/components/admin/CoursesAdmin";
+import NewsAdmin from "@/components/admin/NewsAdmin";
 import JourneyAdmin from "@/components/admin/JourneyAdmin";
 import GalleryAdmin from "@/components/admin/GalleryAdmin";
 import SocialLinksAdmin from "@/components/admin/SocialLinksAdmin";
@@ -21,6 +22,7 @@ const ADMIN_PATH = process.env.NEXT_PUBLIC_ADMIN_PATH || "estudio";
 const tabs = [
   ["projects", "Projetos", "fa-solid fa-diagram-project"],
   ["gallery", "Galeria", "fa-solid fa-images"],
+  ["news", "Na Mídia", "fa-solid fa-newspaper"],
   ["courses", "Cursos", "fa-solid fa-graduation-cap"],
   ["journey", "Jornada", "fa-solid fa-route"],
   ["skills", "Habilidades", "fa-solid fa-layer-group"],
@@ -129,6 +131,7 @@ export default function Dashboard() {
         >
           {tab === "projects" && <ProjectsAdmin token={session.access_token} />}
           {tab === "gallery" && <GalleryAdmin token={session.access_token} />}
+          {tab === "news" && <NewsAdmin token={session.access_token} />}
           {tab === "courses" && <CoursesAdmin token={session.access_token} />}
           {tab === "journey" && <JourneyAdmin token={session.access_token} />}
           {tab === "skills" && <SkillsAdmin token={session.access_token} />}
