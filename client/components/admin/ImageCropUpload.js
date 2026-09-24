@@ -14,6 +14,7 @@ export default function ImageCropUpload({ token, value, onChange }) {
   const [error, setError] = useState("");
   const [picked, setPicked] = useState(null); // { file, url, naturalAspect }
   const [cropping, setCropping] = useState(false);
+  const [recrop, setRecrop] = useState(null); // { naturalAspect } — recorte da foto já enviada
   const inputRef = useRef(null);
 
   async function pick(file) {
@@ -36,12 +37,25 @@ export default function ImageCropUpload({ token, value, onChange }) {
     setError("");
     try {
       const { url, width, height } = await api.uploadCover(token, blob);
-      onChange(url, { width, height });
+      onChange(url, { width, height, cropped: !!recrop }); // cropped: recorte de foto já salva
       cancelPicked();
+      setRecrop(null);
     } catch (err) {
       setError(err.message);
     } finally {
       setUploading(false);
+    }
+  }
+
+  // A foto enviada vira uma nova (recortada); a antiga fica órfã no R2, igual a
+  // quando se troca a foto — ponytail: sem limpeza de órfãos.
+  async function startRecrop() {
+    setError("");
+    try {
+      const img = await loadImage(value);
+      setRecrop({ naturalAspect: img.naturalWidth / img.naturalHeight });
+    } catch {
+      setError("Não consegui abrir a foto pra recortar.");
     }
   }
 
@@ -103,6 +117,14 @@ export default function ImageCropUpload({ token, value, onChange }) {
               />
               <button
                 type="button"
+                onClick={startRecrop}
+                aria-label="Recortar imagem"
+                className="absolute right-12 top-2 flex h-8 w-8 items-center justify-center rounded-lg bg-black/60 text-white backdrop-blur transition-colors hover:bg-accent/80"
+              >
+                <i className="fa-solid fa-crop-simple" aria-hidden />
+              </button>
+              <button
+                type="button"
                 onClick={() => onChange("", {})}
                 aria-label="Remover imagem"
                 className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg bg-black/60 text-white backdrop-blur transition-colors hover:bg-red-500/80"
@@ -154,6 +176,19 @@ export default function ImageCropUpload({ token, value, onChange }) {
               </div>
             </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {recrop && (
+          <CropModal
+            src={value}
+            naturalAspect={recrop.naturalAspect}
+            busy={uploading}
+            confirmLabel="Cortar e salvar"
+            onCancel={() => setRecrop(null)}
+            onConfirm={send}
+          />
         )}
       </AnimatePresence>
 

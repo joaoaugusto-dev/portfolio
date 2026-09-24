@@ -185,6 +185,21 @@ export default function GalleryAdmin({ token }) {
     }
   }
 
+  // Recorte de foto já postada salva na hora: o arquivo novo já subiu, então
+  // deixar pra "Salvar alterações" só arriscava perder o recorte.
+  async function saveCropped(next) {
+    setEditing(next);
+    try {
+      await api.updateGalleryItem(token, next.id, next);
+      notify("Recorte salvo");
+      refresh();
+      syncHome();
+    } catch (err) {
+      setError(err.message);
+      notify(err.message, "error");
+    }
+  }
+
   async function handleDelete(id) {
     if (!confirm("Excluir esta foto?")) return;
     try {
@@ -292,9 +307,11 @@ export default function GalleryAdmin({ token }) {
           <ImageCropUpload
             token={token}
             value={editing.image}
-            onChange={(image, meta = {}) =>
-              setEditing({ ...editing, image, width: meta.width ?? null, height: meta.height ?? null })
-            }
+            onChange={(image, meta = {}) => {
+              const next = { ...editing, image, width: meta.width ?? null, height: meta.height ?? null };
+              if (meta.cropped) saveCropped(next);
+              else setEditing(next);
+            }}
           />
 
           <EventFields value={editing} onChange={(v) => setEditing({ ...editing, ...v })} />
