@@ -91,13 +91,13 @@ export default function Hero({ texts }) {
             style={{ animation: reduced ? "none" : "floaty 4s ease-in-out infinite" }}
           />
           <Image
-            src="/images/me.png"
+            src="/images/me.jpg"
             alt={`${nameLine1.pt} ${nameLine2.pt}, ${tagline.pt}`}
             fill
             sizes="150px"
             priority
             placeholder="blur"
-            blurDataURL="data:image/jpeg;base64,/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAKAAoDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAABAIH/8QAJhAAAgECBQIHAAAAAAAAAAAAAQIDBAUABhESMSFBExQVIiNRkf/EABUBAQEAAAAAAAAAAAAAAAAAAAEF/8QAGxEAAgMAAwAAAAAAAAAAAAAAAQIAAxEEE+H/2gAMAwEAAhEDEQA/AGZgskcNxpfM3AR0MSGSaKnIVoE7kjroT2PQYv0uyTfJHaM1yI/uV0ChWB4IG7jGEZuqZ3zdd908reJcKhX1cncBIdAfsDQfmB093uUdPEkdwrERVAVVnYAADgDXEe/j2CpG7DuexZgcwT//2Q=="
+            blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA0JCgsKCA0LCgsODg0PEyAVExISEyccHhcgLikxMC4pLSwzOko+MzZGNywtQFdBRkxOUlNSMj5aYVpQYEpRUk//2wBDAQ4ODhMREyYVFSZPNS01T09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0//wAARCAAKAAoDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwBuoXUWo6dOFnll+wxk8P8ALuIJx1wfr+Fc2l9OY1LA5wM/uV/xpp/5Ash7mYg+/X/AflVdCdi8noKcaaSH7ezvY//Z"
             className="relative rounded-full border-4 border-background object-cover"
           />
         </div>
