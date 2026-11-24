@@ -44,12 +44,15 @@ export const metadata = {
   // ?lang=en passam a consolidar a autoridade na home em vez de dividir.
   alternates: { canonical: "/" },
   // Google prefers an icon >= 48px; o .ico só tem 16/32 e aparecia errado na busca.
+  // ?v= troca a URL quando o ícone precisa ser rebuscado: o navegador guarda até
+  // a FALHA (na troca de DNS da Vercel pro servidor, quem pegou o 404 ficou sem
+  // ícone). Mude o número se trocar a imagem.
   icons: {
     icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/images/icon.png", type: "image/png", sizes: "256x256" },
+      { url: "/favicon.ico?v=2", sizes: "any" },
+      { url: "/images/icon.png?v=2", type: "image/png", sizes: "256x256" },
     ],
-    apple: "/images/icon.png",
+    apple: "/images/icon.png?v=2",
   },
   openGraph: {
     type: "website",
