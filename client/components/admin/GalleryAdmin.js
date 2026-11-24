@@ -149,8 +149,8 @@ export default function GalleryAdmin({ token }) {
     setProgress({ done: 0, total: picked.length });
     let enviadas = 0;
     try {
-      // Uma de cada vez de propósito: o backend é free tier, e assim o contador
-      // mostra progresso real em vez de tudo travar junto.
+      // Uma de cada vez de propósito: a ordem de envio vira a ordem na pasta
+      // (empate de "order" cai no createdAt), e o contador mostra progresso real.
       for (const p of picked) {
         const { url, width, height } = await api.uploadCover(token, p.file);
         await api.createGalleryItem(token, {

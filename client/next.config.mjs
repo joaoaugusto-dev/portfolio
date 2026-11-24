@@ -1,9 +1,8 @@
 /** @type {import('next').NextConfig} */
-// Imagens/vídeo/pdf não passam mais por rewrite estático (era resolvido no
-// build, sem failover — servidor caseiro caindo quebrava toda imagem mesmo
-// com a home no ar). Agora são rotas de verdade: app/api/covers/[key] e
-// app/midia/[name]/arquivo(+poster), que chamam proxyBinary (lib/api.js) e
-// trocam de host em runtime, igual aos dados da home.
+// Imagens/vídeo/pdf passam por rotas de verdade (app/api/covers/[key] e
+// app/midia/[name]/arquivo(+poster), via proxyBinary em lib/api.js), não por
+// rewrite: rewrite é resolvido no build e não enxerga API_INTERNAL_URL, que só
+// existe em runtime.
 const nextConfig = {
   // Teto de quanto tempo o CDN pode servir uma página vencida. Passado esse
   // tempo o CDN não pode mais servir o stale: ele revalida BLOQUEANDO — renderiza

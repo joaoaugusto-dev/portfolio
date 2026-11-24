@@ -47,13 +47,6 @@ async function get(key, range, method = "GET") {
   };
 }
 
-async function downloadObject(key, range) {
-  const obj = await get(key, range);
-  if (!obj) return null;
-  const { res, ...meta } = obj;
-  return { ...meta, buffer: Buffer.from(await res.arrayBuffer()) };
-}
-
 // Pro /raw de vídeo/arquivo: devolve o stream pra dar pipe direto na resposta,
 // sem bufferizar. Destruir o stream (cliente cancelou um seek) cancela o fetch
 // do bucket junto, em vez de continuar baixando o resto do arquivo à toa.
@@ -83,4 +76,10 @@ async function deleteObjects(keys) {
   }
 }
 
-module.exports = { uploadObject, downloadObject, streamObject, deleteObjects, headObject };
+// Pra quem lê por HTTP sozinho (o ffmpeg, em lib/poster): URL do objeto e os
+// cabeçalhos de auth no formato do `-headers` do ffmpeg. Com isso ele pede só os
+// pedaços que precisa (Range), em vez de receber o vídeo inteiro por pipe.
+const objectUrl = (key) => `${base}/api/bucket/file?${q(key)}`;
+const httpHeaders = `Authorization: Bearer ${token}\r\nX-Requested-With: hosting\r\n`;
+
+module.exports = { uploadObject, streamObject, deleteObjects, headObject, objectUrl, httpHeaders };

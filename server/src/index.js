@@ -44,6 +44,13 @@ app.use(
   }),
 );
 app.use(express.json());
+// Padrão: nada em cache. Sem Cache-Control, a Cloudflare aplica 4h de cache no
+// navegador — um 404 ou um JSON de erro ficava preso esse tempo todo. As rotas
+// de arquivo/capa sobrescrevem com cache longo quando dá certo.
+app.use((req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+});
 
 app.get("/health", (req, res) => res.json({ ok: true }));
 app.use("/api/auth", authRouter);

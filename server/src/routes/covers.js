@@ -4,7 +4,7 @@ const multer = require("multer");
 const rateLimit = require("express-rate-limit");
 const sharp = require("sharp");
 const requireAuth = require("../middleware/requireAuth");
-const { uploadObject, downloadObject } = require("../lib/storage");
+const { uploadObject, streamObject } = require("../lib/storage");
 const { ensureRoom, addUsage } = require("../lib/storageCap");
 const asyncRoute = require("../middleware/asyncRoute");
 
@@ -59,11 +59,12 @@ router.post("/", requireAuth, upload.single("file"), asyncRoute(async (req, res)
 // Público de propósito (capa de projeto/curso na home, sem auth) — mesma
 // proteção de taxa das rotas de mídia, já que também não exige login.
 router.get("/:key", publicReadLimit, asyncRoute(async (req, res) => {
-  const obj = await downloadObject(prefix + req.params.key);
+  const obj = await streamObject(prefix + req.params.key);
   if (!obj) return res.status(404).json({ error: "Imagem não encontrada" });
   res.set("Content-Type", obj.contentType || "image/webp");
   res.set("Cache-Control", "public, max-age=31536000, immutable");
-  res.send(obj.buffer);
+  if (obj.contentLength != null) res.set("Content-Length", obj.contentLength);
+  obj.stream.pipe(res);
 }));
 
 module.exports = router;

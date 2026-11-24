@@ -5,7 +5,7 @@ const { Op } = require("sequelize");
 const Media = require("../models/Media");
 const requireAuth = require("../middleware/requireAuth");
 const { extractPoster, extractFrameAt, compressPoster } = require("../lib/poster");
-const { uploadObject, downloadObject, streamObject, deleteObjects, headObject } = require("../lib/storage");
+const { uploadObject, streamObject, deleteObjects, headObject } = require("../lib/storage");
 const { ensureRoom, addUsage, removeUsage, currentUsage, CAP_BYTES } = require("../lib/storageCap");
 const asyncRoute = require("../middleware/asyncRoute");
 
@@ -157,12 +157,13 @@ router.get("/raw/:name/poster", publicReadLimit, asyncRoute(async (req, res) => 
   const media = await findBySlug(req.params.name);
   if (!media || media.kind !== "video") return res.status(404).json({ error: "Sem miniatura" });
 
-  const obj = await downloadObject(posterKey(media.name));
+  const obj = await streamObject(posterKey(media.name));
   if (!obj) return res.status(404).json({ error: "Sem miniatura" });
 
   res.set("Content-Type", "image/jpeg");
   res.set("Cache-Control", "public, max-age=31536000, immutable");
-  res.send(obj.buffer);
+  if (obj.contentLength != null) res.set("Content-Length", obj.contentLength);
+  obj.stream.pipe(res);
 }));
 
 // 1) Reserva o nome e confere o teto. Devolve o caminho do PUT (2) — ainda não
@@ -213,9 +214,8 @@ router.put("/upload/:name", requireAuth, asyncRoute(async (req, res) => {
 // 3) O navegador chama isso depois que o PUT (2) terminou: confirma
 // que o objeto existe de fato (nunca confia só no que o cliente diz) e cria o
 // registro. A extração do poster de vídeo roda depois, em segundo plano (ver
-// generatePosterInBackground) — baixar o vídeo de volta + rodar ffmpeg dentro
-// da própria requisição estourava o timeout do proxy da Cloudflare em
-// vídeo grande, derrubando a conexão com 502 antes do registro nem existir.
+// generatePosterInBackground) — não segura a resposta do upload esperando o
+// ffmpeg, e uma falha nele não desfaz um upload que já deu certo.
 router.post("/complete", requireAuth, asyncRoute(async (req, res) => {
   const { name, title, description } = req.body;
   if (!name) return res.status(400).json({ error: "name é obrigatório" });
@@ -250,10 +250,7 @@ router.post("/complete", requireAuth, asyncRoute(async (req, res) => {
 // concluído do ponto de vista do usuário e não deve quebrar por isso.
 async function generatePosterInBackground(name) {
   try {
-    const obj = await downloadObject(name);
-    if (!obj) return;
-    const poster = await extractPoster(obj.buffer);
-    if (!poster) return;
+    const poster = await extractPoster(name);
     await uploadObject(posterKey(name), poster, "image/jpeg");
     await addUsage(poster.length);
     // updatedAt muda a versão da URL (?v=) — sem isso o front não sabe que uma
@@ -278,9 +275,7 @@ router.post("/:name/poster", requireAuth, upload.single("file"), asyncRoute(asyn
     if (req.file) {
       poster = await compressPoster(req.file.buffer);
     } else if (req.body.atSeconds) {
-      const obj = await downloadObject(media.name);
-      if (!obj) return res.status(404).json({ error: "Arquivo não encontrado" });
-      poster = await extractFrameAt(obj.buffer, Number(req.body.atSeconds));
+      poster = await extractFrameAt(media.name, Number(req.body.atSeconds));
     } else {
       return res.status(400).json({ error: "Envie uma imagem ou um instante do vídeo" });
     }
@@ -288,8 +283,8 @@ router.post("/:name/poster", requireAuth, upload.single("file"), asyncRoute(asyn
     await ensureRoom(poster.length);
     // Antes de gravar por cima, desconta o que a miniatura anterior ocupava —
     // senão cada troca de miniatura só soma, nunca substitui, no contador.
-    const previous = await downloadObject(posterKey(media.name));
-    if (previous) await removeUsage(previous.buffer.length);
+    const previous = await headObject(posterKey(media.name));
+    if (previous) await removeUsage(previous.contentLength || 0);
 
     await uploadObject(posterKey(media.name), poster, "image/jpeg");
     await addUsage(poster.length);
@@ -315,10 +310,10 @@ router.delete("/:name", requireAuth, asyncRoute(async (req, res) => {
   const media = await Media.findOne({ where: { name: req.params.name } });
   if (!media) return res.status(404).json({ error: "Arquivo não encontrado" });
 
-  const posterObj = media.kind === "video" ? await downloadObject(posterKey(media.name)) : null;
+  const posterObj = media.kind === "video" ? await headObject(posterKey(media.name)) : null;
   await deleteObjects([media.name, posterKey(media.name)]);
   await removeUsage(media.size || 0);
-  if (posterObj) await removeUsage(posterObj.buffer.length);
+  if (posterObj) await removeUsage(posterObj.contentLength || 0);
 
   await media.destroy();
   res.status(204).end();
