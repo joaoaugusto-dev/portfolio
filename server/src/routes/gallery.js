@@ -2,6 +2,7 @@ const express = require("express");
 const sequelize = require("../db");
 const GalleryItem = require("../models/GalleryItem");
 const requireAuth = require("../middleware/requireAuth");
+const { releaseCoverLater } = require("../lib/covers");
 
 const router = express.Router();
 
@@ -31,8 +32,11 @@ router.put("/reorder", requireAuth, async (req, res) => {
 router.put("/:id", requireAuth, async (req, res) => {
   const item = await GalleryItem.findByPk(req.params.id);
   if (!item) return res.status(404).json({ error: "Not found" });
+  const oldImage = item.image;
   await item.update(req.body);
   res.json(item);
+  // Recorte ou troca de foto: a imagem anterior vira órfã — apaga se ninguém mais usa.
+  if (item.image !== oldImage) releaseCoverLater(oldImage);
 });
 
 router.delete("/:id", requireAuth, async (req, res) => {
@@ -40,6 +44,7 @@ router.delete("/:id", requireAuth, async (req, res) => {
   if (!item) return res.status(404).json({ error: "Not found" });
   await item.destroy();
   res.status(204).end();
+  releaseCoverLater(item.image);
 });
 
 module.exports = router;
