@@ -39,7 +39,7 @@ export default function Hero({ texts }) {
     "Software Developer based in São João da Boa Vista, Brazil",
   );
   const buildingWith = tx(texts, "hero.buildingWith", "construindo com", "building with");
-  const stackText = tx(texts, "hero.stack", "Flutter, Node.js, NestJS, ESP32, Supabase");
+  const stackText = tx(texts, "hero.stack", "Flutter, Dart, Node.js, NestJS, Next.js, React, PostgreSQL, Supabase, ESP32");
   const ctaProjects = tx(texts, "hero.ctaProjects", "Ver Projetos", "View Projects");
   const ctaContact = tx(texts, "hero.ctaContact", "Vamos Conversar", "Let's Talk");
   const STACK = stackText.pt.split(",").map((s) => s.trim()).filter(Boolean);

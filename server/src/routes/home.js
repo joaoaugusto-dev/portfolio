@@ -14,7 +14,7 @@ const router = express.Router();
 // Tudo que a home precisa, numa requisição só.
 //
 // Antes o render buscava as 8 listas em 8 chamadas HTTP separadas. Elas saíam em
-// paralelo no `Promise.all`, mas cada uma pagava DNS + TLS + wake-up do Render por
+// paralelo no `Promise.all`, mas cada uma pagava DNS + TLS por
 // conta própria: de 0,45s a 1,7s cada, medido. Como o render da home é bloqueante
 // pra quem cai num cache expirado (e pro admin logo depois de salvar), isso era o
 // grosso do TTFB de 3,4s.

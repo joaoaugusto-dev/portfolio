@@ -1,14 +1,13 @@
 /** @type {import('next').NextConfig} */
-// Imagens/vídeo/pdf não passam mais por rewrite estático (era resolvido no
-// build, sem failover — servidor caseiro caindo quebrava toda imagem mesmo
-// com a home no ar). Agora são rotas de verdade: app/api/covers/[key] e
-// app/midia/[name]/arquivo(+poster), que chamam proxyBinary (lib/api.js) e
-// trocam de host em runtime, igual aos dados da home.
+// Imagens/vídeo/pdf passam por rotas de verdade (app/api/covers/[key] e
+// app/midia/[name]/arquivo(+poster), via proxyBinary em lib/api.js), não por
+// rewrite: rewrite é resolvido no build e não enxerga API_INTERNAL_URL, que só
+// existe em runtime.
 const nextConfig = {
   // Teto de quanto tempo o CDN pode servir uma página vencida. Passado esse
   // tempo o CDN não pode mais servir o stale: ele revalida BLOQUEANDO — renderiza
-  // a home e espera as 9 chamadas da API antes de responder (x-vercel-cache:
-  // REVALIDATED, 3,4s de TTFB, medido). Com 120s, num site de baixo tráfego quase
+  // a home e espera as 9 chamadas da API antes de responder (3,4s de TTFB,
+  // medido). Com 120s, num site de baixo tráfego quase
   // toda visita real caía nesse caminho: era o FCP/LCP de 4s.
   //
   // O padrão do Next é 1 ANO, o que trava a home num deploy se a revalidação em
@@ -21,8 +20,8 @@ const nextConfig = {
   },
 
   // Default do Next tem 8 deviceSizes (até 3840, pensado pra 4K) e 8
-  // imageSizes. Cada combinação de imagem+tamanho conta como uma
-  // transformação cobrada; num portfólio de baixo tráfego isso gera
+  // imageSizes. Cada combinação de imagem+tamanho é uma variante que o
+  // servidor gera e guarda; num portfólio de baixo tráfego isso gera
   // variantes que quase ninguém pede. Cortado pro que os `sizes` usados
   // em Hero/Gallery/ProjectsGrid/Courses realmente cobrem: mobile até
   // desktop 1920 (sem 2K/4K) e só os dois imageSizes que o ícone fixo

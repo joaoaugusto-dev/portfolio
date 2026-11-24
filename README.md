@@ -1,63 +1,74 @@
 # Portfólio — João Augusto de Freitas
 
-Duas apps:
+Tudo no servidor caseiro (painel de hospedagem):
 
-- `server/` — API Express + Sequelize (Postgres do Supabase) + upload pro Cloudflare R2. Hospedar no Render.
-- `client/` — site + painel admin em Next.js/React. Hospedar no Vercel.
+- `server/` — API Express + Sequelize. Postgres e bucket de arquivos do próprio hosting. Login próprio (bcrypt + JWT). App `portfolio-api` → https://portfolio-api.joaoaugusto.dev
+- `client/` — site + painel admin em Next.js/React. App `portfolio` → https://www.joaoaugusto.dev
+- `apex/` — só redireciona (308) `joaoaugusto.dev` → `www`, preservando caminho. App `portfolio-apex`: o hosting liga um endereço por app.
 
-## 1. Configurar o Supabase (banco + autenticação)
+O hosting cria o DNS com o `cert.pem` padrão do `cloudflared`, que é de outra zona. Pra `joaoaugusto.dev`, crie o registro à mão:
+`cloudflared --origincert ~/.cloudflared/cert.joaoaugusto.pem tunnel route dns --overwrite-dns $(cat ~/hosting/data/tunnel.id) <host>`
 
-1. Crie um projeto em https://supabase.com.
-2. Em **SQL Editor > New query**, cole o conteúdo de [`server/database.sql`](server/database.sql) e rode. Isso cria a tabela `Projects` e já insere os 11 projetos originais do portfólio.
-3. As tabelas `Courses` e `JourneyItems` (aba **Cursos** e **Jornada** do admin) não precisam de SQL manual — o Sequelize cria elas sozinho (`sequelize.sync()`) na primeira vez que o backend sobe. Ficam vazias até você cadastrar o conteúdo pelo próprio painel admin.
-4. Em **Authentication > Users**, crie seu usuário admin (email + senha) — é o login do painel. Não há cadastro público, então crie manualmente pelo painel do Supabase.
-5. Em **Project Settings > API**, anote `Project URL`, a chave `anon public` e a `service_role` (secreta).
-6. Em **Project Settings > Database > Connect**, aba **Transaction pooler**, copie a connection string do Postgres. Use o pooler (porta 6543), não o host direto `db.xxxx.supabase.co` — esse só tem endereço IPv6 e não conecta em redes sem suporte a IPv6.
+## Infra no hosting
 
-O Supabase aqui é só banco + autenticação do admin — nenhum arquivo (imagem, vídeo, capa) passa por ele.
+| Recurso | Nome | Como chega no app |
+|---|---|---|
+| Banco Postgres | `portfolio` | `DATABASE_URL` (injetado ao ligar o banco) |
+| Bucket privado | `portfolio` | `BUCKET_URL`, `BUCKET_NAME`, `BUCKET_TOKEN` (injetados ao ligar o bucket) |
 
-## 2. Configurar o Cloudflare R2 (armazenamento de arquivos)
+Nenhum arquivo sai direto do bucket pro navegador: tudo passa proxiado pela API (`server/src/routes/files.js` e `covers.js`). Capas ficam em `covers/`, mídia na raiz.
 
-1. Crie uma conta em https://dash.cloudflare.com (grátis, sem cartão pro free tier do R2).
-2. No menu lateral, **R2 Object Storage** → **Create bucket**. Nome: `portfolio` (se usar outro nome, ajuste `R2_BUCKET` no passo 3). Deixa **Private** — nenhum arquivo é servido direto do R2, tudo passa proxiado pela API (`server/src/routes/files.js` e `covers.js`).
-3. Anote o **Account ID** (aparece na página do R2).
-4. **Manage API tokens > Create Account API token** (não "User API token" — esse fica preso à sua conta pessoal). Permissão **Object Read & Write**, restrita ao bucket criado. Copia **Access Key ID** e **Secret Access Key** — o secret só aparece essa vez.
-5. No bucket, aba **Settings > CORS Policy**, adicione (upload de arquivo grande vai direto do navegador pro R2, por isso precisa liberar `PUT`):
-   ```json
-   [{ "AllowedOrigins": ["http://localhost:3000", "https://SEU-DOMINIO-AQUI"], "AllowedMethods": ["PUT"], "AllowedHeaders": ["*"] }]
-   ```
+As tabelas são criadas pelo `sequelize.sync()` no boot. `npm run seed` só popula o que estiver vazio.
 
-## 3. Rodar o backend (`server/`)
+## Variáveis
 
-```bash
-cd server
-cp .env.example .env   # preencha DATABASE_URL, SUPABASE_URL/SERVICE_ROLE_KEY e os R2_*
-npm install
-npm run dev               # http://localhost:4000
-```
+**API (`portfolio-api`)**, além das injetadas:
 
-Se você pulou o passo de SQL no Supabase, `npm run seed` cria a tabela `Projects` via Sequelize e popula os projetos originais (só roda se ela estiver vazia). `Courses` e `JourneyItems` são criadas automaticamente pelo `sequelize.sync()` ao subir o servidor, mas ficam vazias — cadastre o conteúdo pelo painel admin.
+- `JWT_SECRET`: 32+ caracteres aleatórios. A API não sobe sem ele. Trocar derruba todas as sessões do painel.
+- `CORS_ORIGIN`: origens do site separadas por vírgula (`https://www.joaoaugusto.dev,https://joaoaugusto.dev`).
+- `STORAGE_CAP_GB`: teto do bucket (padrão 2). O bucket mora no disco do hosting, dividido com os outros apps. Suba depois de olhar o `df -h`.
+- `DB_SSL=true`: só se um dia o banco for remoto e exigir SSL.
 
-Deploy no Render: o [`render.yaml`](render.yaml) já descreve o serviço (blueprint) — Render → New → Blueprint, aponta pro repo. As variáveis marcadas `sync: false` (`DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`) precisam ser preenchidas à mão no dashboard depois — o blueprint só declara os nomes, nunca guarda segredo. `CORS_ORIGIN` já vem com a URL de produção do site; ajuste se o domínio mudar.
+**Site (`portfolio`)**:
 
-## 4. Rodar o frontend (`client/`)
+- `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_ADMIN_PATH`: entram no bundle **no build**, e o painel não passa build args. Ficam num `client/.env.production` criado na pasta de deploy (fora do git).
+- `API_INTERNAL_URL` (runtime): o Next fala com a API pela rede interna (`http://host.containers.internal:<porta da API>`) em vez de dar a volta pela Cloudflare. É isso que tira o próprio Next do limite de taxa das imagens.
+
+## Deploy
+
+Cada pasta tem o seu `Dockerfile`. Deploy por envio da pasta (`hosting_deploy`), sem `node_modules`/`.env`:
 
 ```bash
-cd client
-cp .env.local.example .env.local   # preencha com URL/anon key do Supabase e a URL da API
-npm install
-npm run dev              # http://localhost:3000
+# API
+hosting_deploy path=server name=portfolio-api db=portfolio bucket=portfolio cport=4000 host=portfolio-api.joaoaugusto.dev
+# Site (com o client/.env.production na pasta)
+hosting_deploy path=client name=portfolio cport=3000 env="API_INTERNAL_URL=http://host.containers.internal:10011"
 ```
 
-Deploy no Vercel: importe a pasta `client/` como projeto e configure as mesmas variáveis de `.env.local.example`, com `NEXT_PUBLIC_API_URL` apontando pro backend no Render.
+## Login do painel
+
+Acesse `/estudio` (ou o valor de `NEXT_PUBLIC_ADMIN_PATH`). Não há cadastro público. Pra trocar o e-mail e a senha do admin (ou criar o primeiro), rode no servidor e responda as perguntas:
+
+```bash
+podman exec -it hs-portfolio-api node scripts/set-admin.js
+```
+
+Sessões já abertas continuam valendo até vencer. Pra derrubar todas na hora (senha vazou, por exemplo), troque o `JWT_SECRET` do app.
+
+A sessão é um JWT de 7 dias guardado no navegador. Quando vence, o painel volta pro login.
+
+## Rodar local
+
+```bash
+cd server && cp .env.example .env   # DATABASE_URL, BUCKET_*, JWT_SECRET
+npm install && npm run dev          # http://localhost:4000
+node scripts/check-storage.js       # confere o bucket de ponta a ponta
+
+cd client && cp .env.local.example .env.local
+npm install && npm run dev          # http://localhost:3000
+```
 
 ## Painel admin
 
-Acesse `/estudio` (ou o valor de `NEXT_PUBLIC_ADMIN_PATH`, se você mudou — ver comentário em [`client/.env.local.example`](client/.env.local.example) e [`client/proxy.js`](client/proxy.js)), entre com o usuário criado no Supabase Auth. Lá dá pra:
-
-- **Projetos** — adicionar/editar/excluir, reordenar.
-- **Cursos** — mesma coisa, pra seção de cursos complementares.
-- **Jornada** — linha do tempo (educação/experiência).
-- **Arquivos** — enviar imagem/vídeo/PDF/outros e copiar o link público pra compartilhar (`/midia/<slug>`, sem extensão). Vídeo ganha miniatura automática (com opção de trocar por outro frame ou por uma imagem escolhida à mão). O link direto do arquivo também pode ser colado no campo "URL da imagem"/capa ao criar projeto ou curso.
-
-Todo upload (arquivo, poster, capa) é travado por um teto de armazenamento configurado em `server/src/lib/storageCap.js` (9GB, com margem do free tier de 10GB do R2) — a barra de uso aparece no topo da aba Arquivos.
+- **Projetos**, **Cursos**, **Jornada**, **Galeria**, **Na Mídia**, **Skills**, **Links**, **Textos**, **Seções**: adicionar, editar, excluir e reordenar.
+- **Arquivos**: enviar imagem/vídeo/PDF/outros e copiar o link público (`/midia/<slug>`, sem extensão). Vídeo ganha miniatura automática. O envio passa pela API até o bucket, em pedaços de 50MB (o túnel da Cloudflare, plano free, recusa mais de 100MB por requisição) e retomável se a conexão cair. Os pedaços se juntam num arquivo temporário do container antes de ir pro bucket, então um envio grande ocupa o dobro do espaço em disco enquanto termina. Teto por arquivo: o do bucket (`STORAGE_CAP_GB`).

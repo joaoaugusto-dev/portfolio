@@ -45,7 +45,7 @@ const siteTexts = [
   { key: "hero.nameLine2", group: "hero", label: "Nome — segunda linha", pt: "de Freitas", en: "de Freitas", order: 1 },
   { key: "hero.tagline", group: "hero", label: "Frase abaixo do nome", pt: "Desenvolvedor de Software em São João da Boa Vista - SP", en: "Software Developer based in São João da Boa Vista, Brazil", order: 2 },
   { key: "hero.buildingWith", group: "hero", label: "Frase antes da tecnologia rotativa", pt: "construindo com", en: "building with", order: 3 },
-  { key: "hero.stack", group: "hero", label: "Tecnologias da lista rotativa (separadas por vírgula)", pt: "Flutter, Node.js, NestJS, ESP32, Supabase", en: "Flutter, Node.js, NestJS, ESP32, Supabase", order: 4 },
+  { key: "hero.stack", group: "hero", label: "Tecnologias da lista rotativa (separadas por vírgula)", pt: "Flutter, Dart, Node.js, NestJS, Next.js, React, PostgreSQL, Supabase, ESP32", en: "Flutter, Dart, Node.js, NestJS, Next.js, React, PostgreSQL, Supabase, ESP32", order: 4 },
   { key: "hero.ctaProjects", group: "hero", label: "Botão: ver projetos", pt: "Ver Projetos", en: "View Projects", order: 5 },
   { key: "hero.ctaContact", group: "hero", label: "Botão: ir para contato", pt: "Vamos Conversar", en: "Let's Talk", order: 6 },
 

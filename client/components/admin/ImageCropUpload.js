@@ -47,8 +47,8 @@ export default function ImageCropUpload({ token, value, onChange }) {
     }
   }
 
-  // A foto enviada vira uma nova (recortada); a antiga fica órfã no R2, igual a
-  // quando se troca a foto — ponytail: sem limpeza de órfãos.
+  // A foto recortada sobe como uma nova; a antiga é apagada pelo servidor quando
+  // o item é salvo com a nova (server/src/lib/covers.js).
   async function startRecrop() {
     setError("");
     try {

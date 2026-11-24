@@ -26,8 +26,8 @@ const DEFAULT_ORDER = ["about", "gallery", "skills", "projects", "news", "journe
 
 export default async function Home() {
   // Duas chamadas, não nove: getHome() traz as 8 listas da API numa requisição só
-  // (ver server/src/routes/home.js). Cada uma dessas 8 antes pagava DNS + TLS +
-  // wake-up do Render por conta própria, 0,45s a 1,7s cada — e esse render é
+  // (ver server/src/routes/home.js). Cada uma dessas 8 antes pagava DNS + TLS
+  // por conta própria, 0,45s a 1,7s cada — e esse render é
   // bloqueante pra quem cai num cache expirado, e pro admin logo depois de salvar.
   const [home, github] = await Promise.all([
     getHome().catch(() => ({})),
@@ -46,9 +46,8 @@ export default async function Home() {
     news = [],
   } = home;
 
-  // getHome() já cai nas 8 rotas antigas se /api/home falhar, e cada uma delas tem
-  // .catch(() => []) pra uma seção fora do ar não derrubar a home inteira. Mas se
-  // TUDO voltou vazio a API caiu, e renderizar assim gravaria
+  // getHome() falhando vira {} lá em cima. Se TUDO voltou vazio a API caiu, e
+  // renderizar assim gravaria
   // uma home vazia no CDN por até `expireTime`. Lançar aqui faz o ISR descartar a
   // revalidação e continuar servindo a última versão boa.
   // A checagem NÃO vale no `next build`: lá, lançar quebraria o deploy inteiro em

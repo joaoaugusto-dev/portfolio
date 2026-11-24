@@ -8,7 +8,7 @@ import { Spot } from "@/components/Fx";
 const ADMIN_PATH = process.env.NEXT_PUBLIC_ADMIN_PATH || "estudio";
 
 export default function AdminLogin() {
-  const { supabase, session, loading } = useSession();
+  const { session, loading, signIn } = useSession();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,10 +26,11 @@ export default function AdminLogin() {
     e.preventDefault();
     setSubmitting(true);
     setError("");
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setSubmitting(false);
-    if (error) {
-      setError(error.message);
+    try {
+      await signIn(email, password);
+    } catch (err) {
+      setSubmitting(false);
+      setError(err.message);
       // Controls em vez de key: um key novo remontaria o form e limparia os campos.
       shake.start({ x: [0, -9, 8, -5, 0], transition: { duration: 0.4 } });
       return;

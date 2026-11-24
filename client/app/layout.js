@@ -1,6 +1,4 @@
 import { Geist, Geist_Mono } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import { I18nProvider } from "@/components/I18n";
 import Fx from "@/components/Fx";
@@ -9,7 +7,7 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 // Fixo, e com www: o apex responde 308 pro www, então quando isso vinha de
-// NEXT_PUBLIC_SITE_URL (que na Vercel estava no apex) o <link rel="canonical">
+// NEXT_PUBLIC_SITE_URL (que já esteve no apex) o <link rel="canonical">
 // apontava pra uma URL que redireciona. Canonical que redireciona é sinal
 // conflitante — o Google tem que reconciliar sozinho qual versão indexar.
 // robots.txt, sitemap e llms.txt já usavam www; agora tudo fala a mesma coisa.
@@ -145,8 +143,6 @@ export default function RootLayout({ children }) {
       <body className="min-h-full antialiased">
         <Fx />
         <I18nProvider>{children}</I18nProvider>
-        <Analytics />
-        <SpeedInsights />
       </body>
     </html>
   );

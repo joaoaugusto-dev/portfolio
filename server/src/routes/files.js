@@ -1,3 +1,7 @@
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+const { pipeline } = require("stream/promises");
 const express = require("express");
 const multer = require("multer");
 const rateLimit = require("express-rate-limit");
@@ -5,20 +9,28 @@ const { Op } = require("sequelize");
 const Media = require("../models/Media");
 const requireAuth = require("../middleware/requireAuth");
 const { extractPoster, extractFrameAt, compressPoster } = require("../lib/poster");
-const { uploadObject, downloadObject, streamObject, deleteObjects, headObject, presignPutUrl } = require("../lib/r2");
+const { uploadObject, streamObject, deleteObjects, headObject } = require("../lib/storage");
 const { ensureRoom, addUsage, removeUsage, currentUsage, CAP_BYTES } = require("../lib/storageCap");
 const asyncRoute = require("../middleware/asyncRoute");
 
 const router = express.Router();
-// Só a miniatura passa pelo servidor agora (imagem pequena) — o vídeo/arquivo em
-// si vai direto do navegador pro R2 via URL assinada (ver /presign), sem passar
-// pela memória do processo. É o que permite arquivo grande sem derrubar o Render.
+// Só a miniatura passa pelo multer (imagem pequena, em memória). O vídeo/arquivo
+// em si vai em streaming pro bucket (ver PUT /upload/:name), sem bufferizar.
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 // GETs (raw/:name, raw/:name/poster, meta/:name) são públicos de propósito — o
 // site inteiro depende deles pra mostrar imagem/vídeo. Sem auth, então sem esse
-// limite qualquer script podia martelar e comer a cota de leitura (Class B) do R2.
-const publicReadLimit = rateLimit({ windowMs: 15 * 60 * 1000, limit: 600, standardHeaders: true, legacyHeaders: false });
+// limite qualquer script podia martelar o servidor.
+// skip: pedido sem X-Forwarded-For não veio pelo túnel da Cloudflare (que sempre
+// põe esse header) — é o Next chamando pela rede interna (API_INTERNAL_URL).
+// Sem isso, toda imagem do site, proxiada pelo Next, contava no limite de UM IP.
+const publicReadLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => !req.headers["x-forwarded-for"],
+});
 
 function kindOf(mimetype) {
   if (mimetype.startsWith("image/")) return "image";
@@ -27,7 +39,7 @@ function kindOf(mimetype) {
   return "other";
 }
 
-// O nome guardado no banco é "slug.ext" (a chave real no R2). O link
+// O nome guardado no banco é "slug.ext" (a chave real no bucket). O link
 // compartilhado, porém, não mostra a extensão — só o slug.
 function stripExt(name) {
   const dot = name.lastIndexOf(".");
@@ -36,7 +48,7 @@ function stripExt(name) {
 
 const posterKey = (name) => `${name}.poster.jpg`;
 
-// O link do R2 nunca sai daqui. O front recebe dois caminhos no domínio do site:
+// O link do bucket nunca sai daqui. O front recebe dois caminhos no domínio do site:
 // a página (/midia/<slug>) e o arquivo cru (/midia/<slug>/arquivo, reescrito pro Next).
 const pagePath = (name) => `/midia/${encodeURIComponent(stripExt(name))}`;
 const rawPath = (name) => `${pagePath(name)}/arquivo`;
@@ -57,7 +69,7 @@ function slugify(name) {
 }
 
 // URLs públicas só carregam o slug (sem extensão); o nome real ("slug.ext",
-// a chave no R2) mora só no banco. Resolve um a partir do outro aqui.
+// a chave no bucket) mora só no banco. Resolve um a partir do outro aqui.
 function findBySlug(slug) {
   return Media.findOne({ where: { [Op.or]: [{ name: slug }, { name: { [Op.like]: `${slug}.%` } }] } });
 }
@@ -88,7 +100,7 @@ router.get("/", requireAuth, asyncRoute(async (req, res) => {
   res.json(files.map(present));
 }));
 
-// Uso atual do R2 vs o teto que o app se impõe — pro admin ver de longe antes de
+// Uso atual do bucket vs o teto que o app se impõe — pro admin ver de longe antes de
 // chegar perto do limite, não só descobrir quando um upload já foi recusado.
 router.get("/usage", requireAuth, asyncRoute(async (req, res) => {
   res.json({ bytesUsed: await currentUsage(), capBytes: CAP_BYTES });
@@ -108,7 +120,7 @@ const executableInBrowser = /^(text\/html|application\/xhtml\+xml|image\/svg\+xm
 
 // Público de propósito: é o que as <img>/<video> do site usam. Sem auth porque
 // header não vai em src="", e o conteúdo é material público do portfólio.
-// Repassa o Range do navegador pro R2 e dá pipe direto na resposta (sem
+// Repassa o Range do navegador pro bucket e dá pipe direto na resposta (sem
 // bufferizar) — essencial pra <video>: sem isso, tocar, arrastar a barra ou
 // escolher frame baixava o arquivo inteiro do zero a cada vez.
 router.get("/raw/:name", publicReadLimit, asyncRoute(async (req, res) => {
@@ -119,13 +131,14 @@ router.get("/raw/:name", publicReadLimit, asyncRoute(async (req, res) => {
   const obj = await streamObject(media.name, range);
   if (!obj) return res.status(404).json({ error: "Arquivo não encontrado" });
 
-  const type = obj.contentType || media.mimetype || "application/octet-stream";
+  // mimetype do banco primeiro: o bucket deduz o tipo só pela extensão.
+  const type = media.mimetype || obj.contentType || "application/octet-stream";
   res.set("Content-Type", type);
   res.set("X-Content-Type-Options", "nosniff");
   res.set("Accept-Ranges", "bytes");
   if (obj.contentLength != null) res.set("Content-Length", obj.contentLength);
   if (executableInBrowser.test(type)) res.set("Content-Disposition", "attachment");
-  // Com Range, NUNCA deixa o CDN (Vercel, na frente do rewrite /midia/.../arquivo)
+  // Com Range, NUNCA deixa um CDN (na frente de /midia/.../arquivo)
   // guardar a resposta: ele cacheia por URL, sem levar o Range em conta, então um
   // pedido pelo início do vídeo podia receber de volta bytes cacheados de um
   // pedido anterior por outro trecho — o vídeo simplesmente não tocava. Sem
@@ -136,7 +149,7 @@ router.get("/raw/:name", publicReadLimit, asyncRoute(async (req, res) => {
     res.status(206);
     res.set("Content-Range", obj.contentRange);
   }
-  // Cliente cancelou (seek novo, fechou a aba)? Corta o download do R2 junto —
+  // Cliente cancelou (seek novo, fechou a aba)? Corta o download do bucket junto —
   // é exatamente esse corte que faltava com o buffer inteiro em memória.
   req.on("close", () => obj.stream.destroy());
   obj.stream.pipe(res);
@@ -148,16 +161,17 @@ router.get("/raw/:name/poster", publicReadLimit, asyncRoute(async (req, res) => 
   const media = await findBySlug(req.params.name);
   if (!media || media.kind !== "video") return res.status(404).json({ error: "Sem miniatura" });
 
-  const obj = await downloadObject(posterKey(media.name));
+  const obj = await streamObject(posterKey(media.name));
   if (!obj) return res.status(404).json({ error: "Sem miniatura" });
 
   res.set("Content-Type", "image/jpeg");
   res.set("Cache-Control", "public, max-age=31536000, immutable");
-  res.send(obj.buffer);
+  if (obj.contentLength != null) res.set("Content-Length", obj.contentLength);
+  obj.stream.pipe(res);
 }));
 
-// 1) Pede uma URL assinada de PUT — o navegador sobe os bytes direto pro R2 a
-// partir daqui, sem passar pelo servidor. Ainda não cria o registro em Media.
+// 1) Reserva o nome e confere o teto. Devolve o caminho do PUT (2) — ainda não
+// cria o registro em Media.
 router.post("/presign", requireAuth, asyncRoute(async (req, res) => {
   const { filename, mimetype, size, name: customName } = req.body;
   if (!filename || !mimetype || !size) {
@@ -176,16 +190,101 @@ router.post("/presign", requireAuth, asyncRoute(async (req, res) => {
     return res.status(err.status || 500).json({ error: err.message });
   }
 
-  const uploadUrl = await presignPutUrl(name, mimetype);
-  res.json({ name, uploadUrl });
+  res.json({ name, uploadUrl: `/api/files/upload/${encodeURIComponent(name)}` });
 }));
 
-// 2) O navegador chama isso depois que o PUT direto pro R2 terminou: confirma
+// 2) Os bytes. O túnel da Cloudflare (plano free) recusa corpo acima de 100MB,
+// então arquivo grande chega em pedaços (o front manda de 50MB), cada um com
+// "Content-Range: bytes início-fim/total". Os pedaços vão se juntando num
+// arquivo temporário; no último, o arquivo inteiro segue em streaming pro bucket.
+// Arquivo que cabe num pedaço só vai direto pro bucket, sem tocar o disco.
+//
+// Retomável: reenviar um pedaço (resposta perdida, conexão caiu no meio) corta o
+// temporário de volta pro início dele e grava de novo. Se o servidor tem MENOS
+// do que o pedaço supõe, responde 409 com { received } e o front continua dali.
+const PARTS = path.join(os.tmpdir(), "uploads");
+fs.mkdirSync(PARTS, { recursive: true });
+
+// "bytes 0-52428799/314572800" -> { start, end, total }
+function parseContentRange(header) {
+  const m = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(header || "");
+  if (!m) return null;
+  const [start, end, total] = m.slice(1).map(Number);
+  return end >= start && end < total ? { start, end, total } : null;
+}
+
+const sizeOf = (file) => fs.promises.stat(file).then((st) => st.size, () => 0);
+
+// Envio abandonado no meio deixa o temporário pra trás: limpa os de mais de 1 dia.
+async function sweepStaleParts() {
+  for (const f of await fs.promises.readdir(PARTS)) {
+    const st = await fs.promises.stat(path.join(PARTS, f)).catch(() => null);
+    if (st && Date.now() - st.mtimeMs > 24 * 3600 * 1000) await fs.promises.unlink(path.join(PARTS, f)).catch(() => {});
+  }
+}
+
+router.put("/upload/:name", requireAuth, asyncRoute(async (req, res) => {
+  const { name } = req.params;
+  // Só nomes que /presign poderia ter gerado: barra "covers/..." e "x.poster.jpg".
+  if (name !== slugify(name)) return res.status(400).json({ error: "Nome inválido" });
+  if (await Media.findOne({ where: { name } }))
+    return res.status(409).json({ error: `Já existe um arquivo chamado "${name}"` });
+
+  const length = Number(req.headers["content-length"]);
+  if (!length) return res.status(411).json({ error: "Content-Length obrigatório" });
+  const type = req.headers["content-type"] || "application/octet-stream";
+  // Sem Content-Range = o arquivo inteiro numa requisição só.
+  const r = req.headers["content-range"]
+    ? parseContentRange(req.headers["content-range"])
+    : { start: 0, end: length - 1, total: length };
+  if (!r || length !== r.end - r.start + 1) return res.status(400).json({ error: "Content-Range inválido" });
+
+  if (r.start === 0) {
+    try {
+      await ensureRoom(r.total);
+    } catch (err) {
+      return res.status(err.status || 500).json({ error: err.message });
+    }
+  }
+
+  if (r.start === 0 && r.end + 1 === r.total) {
+    await uploadObject(name, req, type, r.total);
+    return res.status(204).end();
+  }
+
+  const part = path.join(PARTS, name);
+  if (r.start === 0) sweepStaleParts().catch(() => {});
+  const have = r.start === 0 ? 0 : await sizeOf(part);
+  if (have < r.start) {
+    // Reenvio do último pedaço depois que o arquivo já tinha ido pro bucket
+    // (só a resposta se perdeu): já está feito.
+    // ponytail: confere só o tamanho; um objeto antigo com mesmo nome E tamanho passaria.
+    if (have === 0 && (await headObject(name))?.contentLength === r.total) return res.status(204).end();
+    return res.status(409).json({ received: have });
+  }
+  await fs.promises.truncate(part, r.start).catch((err) => {
+    if (err.code !== "ENOENT") throw err;
+  });
+  await pipeline(req, fs.createWriteStream(part, { flags: "a" }));
+  if ((await sizeOf(part)) !== r.end + 1) {
+    await fs.promises.truncate(part, r.start);
+    return res.status(400).json({ error: "Pedaço chegou incompleto — envie de novo" });
+  }
+
+  if (r.end + 1 < r.total) return res.status(202).json({ received: r.end + 1 });
+
+  // Último pedaço: o arquivo inteiro vai pro bucket. O temporário dobra o espaço
+  // em disco só durante esse passo.
+  await uploadObject(name, fs.createReadStream(part), type, r.total);
+  await fs.promises.unlink(part);
+  res.status(204).end();
+}));
+
+// 3) O navegador chama isso depois que o último PUT (2) terminou: confirma
 // que o objeto existe de fato (nunca confia só no que o cliente diz) e cria o
 // registro. A extração do poster de vídeo roda depois, em segundo plano (ver
-// generatePosterInBackground) — baixar o vídeo de volta + rodar ffmpeg dentro
-// da própria requisição estourava o timeout do proxy da Cloudflare/Render em
-// vídeo grande, derrubando a conexão com 502 antes do registro nem existir.
+// generatePosterInBackground) — não segura a resposta do upload esperando o
+// ffmpeg, e uma falha nele não desfaz um upload que já deu certo.
 router.post("/complete", requireAuth, asyncRoute(async (req, res) => {
   const { name, title, description } = req.body;
   if (!name) return res.status(400).json({ error: "name é obrigatório" });
@@ -196,9 +295,9 @@ router.post("/complete", requireAuth, asyncRoute(async (req, res) => {
   if (await Media.findOne({ where: { name } }))
     return res.status(409).json({ error: `Já existe um arquivo chamado "${name}"` });
 
-  const mimetype = head.ContentType || "application/octet-stream";
+  const mimetype = head.contentType || "application/octet-stream";
   const kind = kindOf(mimetype);
-  const size = head.ContentLength || 0;
+  const size = head.contentLength || 0;
 
   const media = await Media.create({
     name,
@@ -220,10 +319,7 @@ router.post("/complete", requireAuth, asyncRoute(async (req, res) => {
 // concluído do ponto de vista do usuário e não deve quebrar por isso.
 async function generatePosterInBackground(name) {
   try {
-    const obj = await downloadObject(name);
-    if (!obj) return;
-    const poster = await extractPoster(obj.buffer);
-    if (!poster) return;
+    const poster = await extractPoster(name);
     await uploadObject(posterKey(name), poster, "image/jpeg");
     await addUsage(poster.length);
     // updatedAt muda a versão da URL (?v=) — sem isso o front não sabe que uma
@@ -248,9 +344,7 @@ router.post("/:name/poster", requireAuth, upload.single("file"), asyncRoute(asyn
     if (req.file) {
       poster = await compressPoster(req.file.buffer);
     } else if (req.body.atSeconds) {
-      const obj = await downloadObject(media.name);
-      if (!obj) return res.status(404).json({ error: "Arquivo não encontrado" });
-      poster = await extractFrameAt(obj.buffer, Number(req.body.atSeconds));
+      poster = await extractFrameAt(media.name, Number(req.body.atSeconds));
     } else {
       return res.status(400).json({ error: "Envie uma imagem ou um instante do vídeo" });
     }
@@ -258,8 +352,8 @@ router.post("/:name/poster", requireAuth, upload.single("file"), asyncRoute(asyn
     await ensureRoom(poster.length);
     // Antes de gravar por cima, desconta o que a miniatura anterior ocupava —
     // senão cada troca de miniatura só soma, nunca substitui, no contador.
-    const previous = await downloadObject(posterKey(media.name));
-    if (previous) await removeUsage(previous.buffer.length);
+    const previous = await headObject(posterKey(media.name));
+    if (previous) await removeUsage(previous.contentLength || 0);
 
     await uploadObject(posterKey(media.name), poster, "image/jpeg");
     await addUsage(poster.length);
@@ -285,10 +379,10 @@ router.delete("/:name", requireAuth, asyncRoute(async (req, res) => {
   const media = await Media.findOne({ where: { name: req.params.name } });
   if (!media) return res.status(404).json({ error: "Arquivo não encontrado" });
 
-  const posterObj = media.kind === "video" ? await downloadObject(posterKey(media.name)) : null;
+  const posterObj = media.kind === "video" ? await headObject(posterKey(media.name)) : null;
   await deleteObjects([media.name, posterKey(media.name)]);
   await removeUsage(media.size || 0);
-  if (posterObj) await removeUsage(posterObj.buffer.length);
+  if (posterObj) await removeUsage(posterObj.contentLength || 0);
 
   await media.destroy();
   res.status(204).end();
