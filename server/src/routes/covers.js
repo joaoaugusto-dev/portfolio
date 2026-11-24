@@ -4,16 +4,23 @@ const multer = require("multer");
 const rateLimit = require("express-rate-limit");
 const sharp = require("sharp");
 const requireAuth = require("../middleware/requireAuth");
-const { uploadObject, downloadObject } = require("../lib/r2");
+const { uploadObject, downloadObject } = require("../lib/storage");
 const { ensureRoom, addUsage } = require("../lib/storageCap");
 const asyncRoute = require("../middleware/asyncRoute");
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
-const publicReadLimit = rateLimit({ windowMs: 15 * 60 * 1000, limit: 600, standardHeaders: true, legacyHeaders: false });
+// skip: mesmo motivo de files.js — o Next pela rede interna não conta no limite.
+const publicReadLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => !req.headers["x-forwarded-for"],
+});
 
-// Prefixo dentro do mesmo bucket do R2 usado pra Arquivos — separa capa de mídia
-// sem precisar criar (e configurar CORS de) um segundo bucket no Cloudflare.
+// Prefixo dentro do mesmo bucket usado pra Arquivos — separa capa de mídia
+// sem precisar de um segundo bucket.
 const prefix = "covers/";
 
 router.post("/", requireAuth, upload.single("file"), asyncRoute(async (req, res) => {
@@ -42,8 +49,8 @@ router.post("/", requireAuth, upload.single("file"), asyncRoute(async (req, res)
   await uploadObject(prefix + key, webp, "image/webp");
   await addUsage(webp.length);
 
-  // Sempre proxiado pelo nosso domínio (nunca a URL crua do R2) — mesmo padrão
-  // de /midia: o front nem precisa saber que existe um R2 por trás. width/height
+  // Sempre proxiado pelo nosso domínio (nunca a URL crua do bucket) — mesmo padrão
+  // de /midia: o front nem precisa saber que existe um bucket por trás. width/height
   // (da imagem já redimensionada) deixam quem chama montar layout tipo colagem
   // sem esperar a imagem carregar no navegador pra saber a proporção.
   res.status(201).json({ url: `/api/covers/${key}`, width, height });

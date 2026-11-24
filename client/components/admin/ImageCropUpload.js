@@ -47,7 +47,7 @@ export default function ImageCropUpload({ token, value, onChange }) {
     }
   }
 
-  // A foto enviada vira uma nova (recortada); a antiga fica órfã no R2, igual a
+  // A foto enviada vira uma nova (recortada); a antiga fica órfã no bucket, igual a
   // quando se troca a foto — ponytail: sem limpeza de órfãos.
   async function startRecrop() {
     setError("");

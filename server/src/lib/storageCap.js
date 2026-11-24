@@ -1,10 +1,10 @@
 const StorageUsage = require("../models/StorageUsage");
 
-// Cloudflare anuncia 10GB grátis no R2; travo em 9GB (decimal) de margem — cobre
-// a diferença entre GB decimal/binário e qualquer coisa que eu não tenha somado
-// certinho (ex.: um upload que falhou no meio e deixou lixo). Passar disso é opt-in
-// (mudar essa constante), nunca por acidente.
-const CAP_BYTES = 9 * 1000 * 1000 * 1000;
+// O bucket mora no disco do servidor caseiro, dividido com os outros apps.
+// Padrão 2GB: quando migrei, os dados do hosting ficavam no / (~4,5GB livres).
+// Quando forem pro disco grande (/srv/armazenamento, ~586GB), suba STORAGE_CAP_GB
+// no app — opt-in depois de olhar o `df -h`, nunca por acidente.
+const CAP_BYTES = Number(process.env.STORAGE_CAP_GB || 2) * 1000 * 1000 * 1000;
 
 async function getRow() {
   const [row] = await StorageUsage.findOrCreate({ where: { id: 1 }, defaults: { bytesUsed: 0 } });
@@ -22,7 +22,7 @@ async function ensureRoom(extraBytes) {
   const used = await currentUsage();
   if (used + extraBytes > CAP_BYTES) {
     const err = new Error(
-      `Limite de armazenamento (${(CAP_BYTES / 1e9).toFixed(1)}GB de 10GB grátis do R2) seria ultrapassado. Apague arquivos antigos antes de enviar mais.`
+      `Limite de armazenamento (${(CAP_BYTES / 1e9).toFixed(1)}GB) seria ultrapassado. Apague arquivos antigos antes de enviar mais.`
     );
     err.status = 507;
     throw err;

@@ -135,7 +135,7 @@ export default function FilesAdmin({ token }) {
           setProgress((p) => ({
             ...p,
             loaded: sentBefore + loaded,
-            // bytes todos no R2, mas falta confirmar (/complete) e, se for vídeo,
+            // bytes todos no bucket, mas falta confirmar (/complete) e, se for vídeo,
             // gerar a miniatura no servidor — daí pra frente é indeterminado.
             phase: loaded >= fileTotal ? "processing" : "uploading",
           }));
@@ -205,7 +205,7 @@ export default function FilesAdmin({ token }) {
       {usage && (
         <div className="mb-4 space-y-1.5 rounded-xl border border-white/5 bg-surface px-4 py-3">
           <div className="flex items-center justify-between text-xs text-muted">
-            <span>Armazenamento (R2)</span>
+            <span>Armazenamento</span>
             <span className={usagePct > 90 ? "font-medium text-red-400" : ""}>
               {formatSize(usage.bytesUsed)} de {formatSize(usage.capBytes)}
             </span>
@@ -627,7 +627,7 @@ const fmtTime = (s) => {
 // upload: o <video> aponta pro arquivo local (blob: URL), então arrastar a
 // linha do tempo não depende de rede nem do servidor — é só decodificação no
 // próprio navegador, sem o custo de ida-e-volta que travava a versão anterior
-// (que buscava frames de um vídeo já hospedado no R2).
+// (que buscava frames de um vídeo já hospedado no bucket).
 const STRIP_COUNT = 14;
 
 function LocalPosterPicker({ file, onConfirm, onSkip }) {
@@ -887,7 +887,7 @@ function PosterPicker({ file, token, onClose, onSaved, notify }) {
 
   // Mesma tira de miniaturas do escolhedor pré-upload, só que aqui os frames
   // vêm do servidor (Range por trás) em vez de um blob local — inevitável
-  // pra um vídeo que já está no R2, mas ainda é STRIP_COUNT pedidos, não o
+  // pra um vídeo que já está no bucket, mas ainda é STRIP_COUNT pedidos, não o
   // arquivo inteiro de novo a cada arraste.
   useEffect(() => {
     if (!ready) return;

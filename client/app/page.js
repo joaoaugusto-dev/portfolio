@@ -26,8 +26,8 @@ const DEFAULT_ORDER = ["about", "gallery", "skills", "projects", "news", "journe
 
 export default async function Home() {
   // Duas chamadas, não nove: getHome() traz as 8 listas da API numa requisição só
-  // (ver server/src/routes/home.js). Cada uma dessas 8 antes pagava DNS + TLS +
-  // wake-up do Render por conta própria, 0,45s a 1,7s cada — e esse render é
+  // (ver server/src/routes/home.js). Cada uma dessas 8 antes pagava DNS + TLS
+  // por conta própria, 0,45s a 1,7s cada — e esse render é
   // bloqueante pra quem cai num cache expirado, e pro admin logo depois de salvar.
   const [home, github] = await Promise.all([
     getHome().catch(() => ({})),

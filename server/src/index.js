@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const sequelize = require("./db");
+const authRouter = require("./routes/auth");
 const projectsRouter = require("./routes/projects");
 const filesRouter = require("./routes/files");
 const coversRouter = require("./routes/covers");
@@ -18,7 +19,7 @@ const seed = require("./seed");
 
 const app = express();
 
-// Render (e qualquer PaaS) fica atrás de um único proxy reverso na borda, que
+// Atrás de um único proxy reverso na borda (o túnel da Cloudflare), que
 // seta X-Forwarded-For. Sem isso, o Express não confia nesse header — e o
 // express-rate-limit (nas rotas públicas de mídia/capa) não consegue saber o
 // IP real de quem pediu, base do limite por IP. "1" = confia só nesse primeiro
@@ -45,6 +46,7 @@ app.use(
 app.use(express.json());
 
 app.get("/health", (req, res) => res.json({ ok: true }));
+app.use("/api/auth", authRouter);
 app.use("/api/projects", projectsRouter);
 app.use("/api/files", filesRouter);
 app.use("/api/covers", coversRouter);

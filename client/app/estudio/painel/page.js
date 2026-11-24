@@ -33,7 +33,7 @@ const tabs = [
 ];
 
 export default function Dashboard() {
-  const { supabase, session, loading } = useSession();
+  const { session, loading, signOut } = useSession();
   const router = useRouter();
   const [tab, setTab] = useState("projects");
   const [syncing, setSyncing] = useState(false);
@@ -91,7 +91,7 @@ export default function Dashboard() {
             <span className="ml-2 hidden sm:inline">Ver site</span>
           </Link>
           <button
-            onClick={() => supabase.auth.signOut()}
+            onClick={signOut}
             className="rounded-lg border border-white/10 px-3 py-2 text-sm transition-colors hover:border-red-500/50 hover:text-red-400"
           >
             <i className="fa-solid fa-arrow-right-from-bracket" aria-hidden />

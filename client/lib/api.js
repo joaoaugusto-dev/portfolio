@@ -1,15 +1,21 @@
 // Os dois hosts vêm do ambiente. NEXT_PUBLIC_* é trocado por string literal no
 // BUILD — não custa nada em runtime, é igual a uma constante — mas por isso mesmo
-// mudar o valor na Vercel só vale depois de um redeploy.
+// mudar o valor só vale depois de um novo build (deploy).
 //
 // NEXT_PUBLIC_API_URL     principal. Em dev: http://localhost:4000
-// NEXT_PUBLIC_API_URL_2   reserva. Em dev: não defina (ver abaixo)
+// NEXT_PUBLIC_API_URL_2   reserva, opcional. Em dev: não defina (ver abaixo)
+// API_INTERNAL_URL        só no servidor (não é NEXT_PUBLIC, lida em runtime)
 //
-// Em produção o principal é o servidor caseiro (~0,11s por endpoint, contra
-// 0,45-1,7s do Render) e a reserva é o Render. HTTPS nos dois, nunca HTTP: o
-// painel do admin chama a API do navegador, e página https buscando http é
-// mixed content — o browser bloqueia e o admin para de salvar.
-const RAW_PRIMARY = process.env.NEXT_PUBLIC_API_URL;
+// Em produção a API é o servidor caseiro. HTTPS, nunca HTTP: o painel do admin
+// chama a API do navegador, e página https buscando http é mixed content — o
+// browser bloqueia e o admin para de salvar.
+//
+// API_INTERNAL_URL: o Next roda no mesmo servidor que a API, então do lado do
+// servidor ele fala com ela direto pela rede interna, sem dar a volta pela
+// Cloudflare. E é isso que deixa a API distinguir o Next (sem X-Forwarded-For)
+// de um visitante no limite de taxa das imagens — ver routes/files.js.
+const RAW_PRIMARY =
+  (typeof window === "undefined" && process.env.API_INTERNAL_URL) || process.env.NEXT_PUBLIC_API_URL;
 const RAW_FALLBACK = process.env.NEXT_PUBLIC_API_URL_2;
 
 // Explode no build, não em produção. Sem isso, variável faltando produzia
@@ -70,7 +76,7 @@ export async function proxyBinary(path, range) {
 // Só troca de host em erro de REDE ou 5xx. 404/4xx é resposta definitiva de um
 // servidor saudável e fica onde está — importa agora, porque /api/home só existe
 // depois que o server for deployado: sem essa regra toda visita iria bater no
-// Render à toa antes de cair no caminho antigo.
+// reserva à toa antes de cair no caminho antigo.
 //
 // Sem timeout de propósito: o principal está atrás do Cloudflare, então origem
 // fora do ar vira 5xx rápido (522/523), não conexão pendurada.
@@ -94,7 +100,7 @@ async function getJSON(path, opts) {
 // `no-store` aqui não deixava só o Data Cache de fora: ele marca a rota inteira
 // como dinâmica. O `revalidate = 60` da home virava enfeite (`next build`
 // mostrava `ƒ /`, não ISR) e TODA visita renderizava na hora, esperando a API
-// no Render — que no plano free dorme depois de 15min e acorda em segundos.
+// (na época num plano free que dormia depois de 15min e levava segundos pra acordar).
 // Era o TTFB de 4,4s no mobile.
 //
 // `tags: ["home"]` é o que faz o botão salvar do admin funcionar de verdade.
@@ -179,6 +185,19 @@ export async function getGithubStats(username = "joaoaugusto-dev") {
   return { publicRepos: data.public_repos ?? 0 };
 }
 
+export const TOKEN_KEY = "admin_token";
+
+export async function login(email, password) {
+  const res = await fetch(`${API_URL}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Falha no login (${res.status})`);
+  return body;
+}
+
 async function authedFetch(path, token, options = {}) {
   const init = {
     ...options,
@@ -208,6 +227,13 @@ async function authedFetch(path, token, options = {}) {
     last = new Error(`Request failed (${res.status})`);
   }
   if (!res) throw last;
+
+  // Token vencido ou inválido (ex.: JWT_SECRET trocado): volta pro login em vez
+  // de deixar o painel aberto dando erro em todo salvar.
+  if (res.status === 401) {
+    localStorage.removeItem(TOKEN_KEY);
+    location.reload();
+  }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -292,10 +318,10 @@ export const api = {
   },
   listFiles: (token) => authedFetch("/api/files", token),
   getStorageUsage: (token) => authedFetch("/api/files/usage", token),
-  // O arquivo vai direto do navegador pro R2 (URL assinada) — nunca passa pela
-  // memória do servidor, essencial pra vídeo grande não derrubar o Render. XHR
-  // em vez de fetch pro PUT porque é o único jeito de ler progresso real de
-  // bytes enviados (fetch não expõe upload progress em todo navegador relevante).
+  // O arquivo vai num PUT pra API, que repassa em streaming pro bucket — nunca
+  // fica inteiro na memória do servidor. XHR em vez de fetch pro PUT porque é o
+  // único jeito de ler progresso real de bytes enviados (fetch não expõe upload
+  // progress em todo navegador relevante).
   uploadFile: async (token, file, { name, title, description } = {}, onProgress) => {
     const presign = await authedFetch("/api/files/presign", token, {
       method: "POST",
@@ -304,14 +330,21 @@ export const api = {
 
     await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open("PUT", presign.uploadUrl);
+      xhr.open("PUT", `${API_URL}${presign.uploadUrl}`);
+      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
       xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) onProgress?.(e.loaded, e.total);
       };
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) resolve();
-        else reject(new Error(`Falha ao enviar pro storage (${xhr.status})`));
+        else {
+          let msg = `Falha ao enviar o arquivo (${xhr.status})`;
+          try { msg = JSON.parse(xhr.responseText).error || msg; } catch {}
+          // 413 vem do túnel da Cloudflare, que corta corpo acima de 100MB.
+          if (xhr.status === 413) msg = "Arquivo grande demais (máx. 100MB por envio)";
+          reject(new Error(msg));
+        }
       };
       xhr.onerror = () => reject(new Error("Falha de rede no upload"));
       xhr.send(file);
