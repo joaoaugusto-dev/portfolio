@@ -1,3 +1,7 @@
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+const { pipeline } = require("stream/promises");
 const express = require("express");
 const multer = require("multer");
 const rateLimit = require("express-rate-limit");
@@ -189,9 +193,36 @@ router.post("/presign", requireAuth, asyncRoute(async (req, res) => {
   res.json({ name, uploadUrl: `/api/files/upload/${encodeURIComponent(name)}` });
 }));
 
-// 2) Os bytes, em streaming: o corpo do PUT vai direto pro bucket, sem passar
-// pela memória do processo. Teto real de tamanho: o túnel da Cloudflare corta
-// corpo acima de 100MB (plano free) — arquivo maior precisaria de envio em partes.
+// 2) Os bytes. O túnel da Cloudflare (plano free) recusa corpo acima de 100MB,
+// então arquivo grande chega em pedaços (o front manda de 50MB), cada um com
+// "Content-Range: bytes início-fim/total". Os pedaços vão se juntando num
+// arquivo temporário; no último, o arquivo inteiro segue em streaming pro bucket.
+// Arquivo que cabe num pedaço só vai direto pro bucket, sem tocar o disco.
+//
+// Retomável: reenviar um pedaço (resposta perdida, conexão caiu no meio) corta o
+// temporário de volta pro início dele e grava de novo. Se o servidor tem MENOS
+// do que o pedaço supõe, responde 409 com { received } e o front continua dali.
+const PARTS = path.join(os.tmpdir(), "uploads");
+fs.mkdirSync(PARTS, { recursive: true });
+
+// "bytes 0-52428799/314572800" -> { start, end, total }
+function parseContentRange(header) {
+  const m = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(header || "");
+  if (!m) return null;
+  const [start, end, total] = m.slice(1).map(Number);
+  return end >= start && end < total ? { start, end, total } : null;
+}
+
+const sizeOf = (file) => fs.promises.stat(file).then((st) => st.size, () => 0);
+
+// Envio abandonado no meio deixa o temporário pra trás: limpa os de mais de 1 dia.
+async function sweepStaleParts() {
+  for (const f of await fs.promises.readdir(PARTS)) {
+    const st = await fs.promises.stat(path.join(PARTS, f)).catch(() => null);
+    if (st && Date.now() - st.mtimeMs > 24 * 3600 * 1000) await fs.promises.unlink(path.join(PARTS, f)).catch(() => {});
+  }
+}
+
 router.put("/upload/:name", requireAuth, asyncRoute(async (req, res) => {
   const { name } = req.params;
   // Só nomes que /presign poderia ter gerado: barra "covers/..." e "x.poster.jpg".
@@ -199,19 +230,57 @@ router.put("/upload/:name", requireAuth, asyncRoute(async (req, res) => {
   if (await Media.findOne({ where: { name } }))
     return res.status(409).json({ error: `Já existe um arquivo chamado "${name}"` });
 
-  const size = Number(req.headers["content-length"]);
-  if (!size) return res.status(411).json({ error: "Content-Length obrigatório" });
-  try {
-    await ensureRoom(size);
-  } catch (err) {
-    return res.status(err.status || 500).json({ error: err.message });
+  const length = Number(req.headers["content-length"]);
+  if (!length) return res.status(411).json({ error: "Content-Length obrigatório" });
+  const type = req.headers["content-type"] || "application/octet-stream";
+  // Sem Content-Range = o arquivo inteiro numa requisição só.
+  const r = req.headers["content-range"]
+    ? parseContentRange(req.headers["content-range"])
+    : { start: 0, end: length - 1, total: length };
+  if (!r || length !== r.end - r.start + 1) return res.status(400).json({ error: "Content-Range inválido" });
+
+  if (r.start === 0) {
+    try {
+      await ensureRoom(r.total);
+    } catch (err) {
+      return res.status(err.status || 500).json({ error: err.message });
+    }
   }
 
-  await uploadObject(name, req, req.headers["content-type"] || "application/octet-stream", size);
+  if (r.start === 0 && r.end + 1 === r.total) {
+    await uploadObject(name, req, type, r.total);
+    return res.status(204).end();
+  }
+
+  const part = path.join(PARTS, name);
+  if (r.start === 0) sweepStaleParts().catch(() => {});
+  const have = r.start === 0 ? 0 : await sizeOf(part);
+  if (have < r.start) {
+    // Reenvio do último pedaço depois que o arquivo já tinha ido pro bucket
+    // (só a resposta se perdeu): já está feito.
+    // ponytail: confere só o tamanho; um objeto antigo com mesmo nome E tamanho passaria.
+    if (have === 0 && (await headObject(name))?.contentLength === r.total) return res.status(204).end();
+    return res.status(409).json({ received: have });
+  }
+  await fs.promises.truncate(part, r.start).catch((err) => {
+    if (err.code !== "ENOENT") throw err;
+  });
+  await pipeline(req, fs.createWriteStream(part, { flags: "a" }));
+  if ((await sizeOf(part)) !== r.end + 1) {
+    await fs.promises.truncate(part, r.start);
+    return res.status(400).json({ error: "Pedaço chegou incompleto — envie de novo" });
+  }
+
+  if (r.end + 1 < r.total) return res.status(202).json({ received: r.end + 1 });
+
+  // Último pedaço: o arquivo inteiro vai pro bucket. O temporário dobra o espaço
+  // em disco só durante esse passo.
+  await uploadObject(name, fs.createReadStream(part), type, r.total);
+  await fs.promises.unlink(part);
   res.status(204).end();
 }));
 
-// 3) O navegador chama isso depois que o PUT (2) terminou: confirma
+// 3) O navegador chama isso depois que o último PUT (2) terminou: confirma
 // que o objeto existe de fato (nunca confia só no que o cliente diz) e cria o
 // registro. A extração do poster de vídeo roda depois, em segundo plano (ver
 // generatePosterInBackground) — não segura a resposta do upload esperando o

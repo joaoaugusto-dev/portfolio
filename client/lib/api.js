@@ -169,6 +169,32 @@ async function authedFetch(path, token, options = {}) {
   return res.json();
 }
 
+// 50MB: metade do teto da Cloudflare por requisição, com folga.
+const UPLOAD_CHUNK = 50 * 1024 * 1024;
+
+// Um pedaço do arquivo num PUT. XHR em vez de fetch porque é o único jeito de
+// ler progresso real de bytes enviados. Nunca rejeita: devolve { status, body }
+// (status 0 = falha de rede) e quem chama decide se reenvia.
+function putChunk(url, token, type, file, start, end, onProgress) {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.setRequestHeader("Content-Type", type);
+    xhr.setRequestHeader("Content-Range", `bytes ${start}-${end - 1}/${file.size}`);
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded);
+    xhr.onload = () => {
+      let body = {};
+      try {
+        body = JSON.parse(xhr.responseText);
+      } catch {}
+      resolve({ status: xhr.status, body });
+    };
+    xhr.onerror = () => resolve({ status: 0, body: {} });
+    xhr.send(file.slice(start, end));
+  });
+}
+
 export const api = {
   createProject: (token, data) =>
     authedFetch("/api/projects", token, { method: "POST", body: JSON.stringify(data) }),
@@ -244,37 +270,35 @@ export const api = {
   },
   listFiles: (token) => authedFetch("/api/files", token),
   getStorageUsage: (token) => authedFetch("/api/files/usage", token),
-  // O arquivo vai num PUT pra API, que repassa em streaming pro bucket — nunca
-  // fica inteiro na memória do servidor. XHR em vez de fetch pro PUT porque é o
-  // único jeito de ler progresso real de bytes enviados (fetch não expõe upload
-  // progress em todo navegador relevante).
+  // O arquivo vai em PUTs pra API (ver putChunk), que junta e manda pro bucket
+  // em streaming — nunca fica inteiro na memória do servidor.
   uploadFile: async (token, file, { name, title, description } = {}, onProgress) => {
     const presign = await authedFetch("/api/files/presign", token, {
       method: "POST",
       body: JSON.stringify({ filename: file.name, mimetype: file.type || "application/octet-stream", size: file.size, name }),
     });
 
-    await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("PUT", `${API_URL}${presign.uploadUrl}`);
-      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-      xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) onProgress?.(e.loaded, e.total);
-      };
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) resolve();
-        else {
-          let msg = `Falha ao enviar o arquivo (${xhr.status})`;
-          try { msg = JSON.parse(xhr.responseText).error || msg; } catch {}
-          // 413 vem do túnel da Cloudflare, que corta corpo acima de 100MB.
-          if (xhr.status === 413) msg = "Arquivo grande demais (máx. 100MB por envio)";
-          reject(new Error(msg));
-        }
-      };
-      xhr.onerror = () => reject(new Error("Falha de rede no upload"));
-      xhr.send(file);
-    });
+    // Em pedaços: o túnel da Cloudflare recusa corpo acima de 100MB por
+    // requisição. Pedaço que falha por rede/5xx é reenviado (até 3 vezes); se o
+    // servidor responde 409 { received }, o envio continua de onde ele parou.
+    const url = `${API_URL}${presign.uploadUrl}`;
+    const type = file.type || "application/octet-stream";
+    let offset = 0;
+    let tries = 0;
+    while (offset < file.size) {
+      const end = Math.min(offset + UPLOAD_CHUNK, file.size);
+      const r = await putChunk(url, token, type, file, offset, end, (sent) => onProgress?.(offset + sent, file.size));
+      if (r.status === 202 || r.status === 204) {
+        offset = end;
+        tries = 0;
+      } else if (r.status === 409 && typeof r.body.received === "number") {
+        offset = r.body.received;
+      } else if ((r.status === 0 || r.status >= 500) && ++tries <= 3) {
+        await new Promise((ok) => setTimeout(ok, 2000 * tries));
+      } else {
+        throw new Error(r.body.error || (r.status ? `Falha ao enviar o arquivo (${r.status})` : "Falha de rede no upload"));
+      }
+    }
 
     return authedFetch("/api/files/complete", token, {
       method: "POST",

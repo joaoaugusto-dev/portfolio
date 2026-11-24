@@ -71,4 +71,4 @@ npm install && npm run dev          # http://localhost:3000
 ## Painel admin
 
 - **Projetos**, **Cursos**, **Jornada**, **Galeria**, **Na Mídia**, **Skills**, **Links**, **Textos**, **Seções**: adicionar, editar, excluir e reordenar.
-- **Arquivos**: enviar imagem/vídeo/PDF/outros e copiar o link público (`/midia/<slug>`, sem extensão). Vídeo ganha miniatura automática. O envio passa pela API em streaming até o bucket. **Teto: 100MB por arquivo**, porque o túnel da Cloudflare (plano free) corta corpos maiores.
+- **Arquivos**: enviar imagem/vídeo/PDF/outros e copiar o link público (`/midia/<slug>`, sem extensão). Vídeo ganha miniatura automática. O envio passa pela API até o bucket, em pedaços de 50MB (o túnel da Cloudflare, plano free, recusa mais de 100MB por requisição) e retomável se a conexão cair. Os pedaços se juntam num arquivo temporário do container antes de ir pro bucket, então um envio grande ocupa o dobro do espaço em disco enquanto termina. Teto por arquivo: o do bucket (`STORAGE_CAP_GB`).
